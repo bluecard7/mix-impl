@@ -1,13 +1,11 @@
 package main
 
-/*
-Involve timing
-*/
-
+// May be better to make Instruction an interface
+// because how would you handle binary ops in this arrangement?
 type Instruction struct {
-	C    BinByte
+	C    MIXByte
 	Time int // time it takes to execute instruction
-	Exec func(rSet RegisterSet, memory []BinWord)
+	Exec func(arch MIXArch, cell uint16, L, R byte)
 }
 
 var insts = map[string]Instruction{
@@ -16,13 +14,13 @@ var insts = map[string]Instruction{
 		// integral types used because program is parsed
 		Exec: func(arch MIXArch, cell uint16, L, R byte) {
 			contents := arch.Mem[cell]
-			arch.Regs.A.Bytes[0] = 1
+			arch.Regs.A[0] = 1
 			if L == 0 {
-				arch.Regs.A.Bytes[0] = contents[0]
+				arch.Regs.A[0] = contents[0]
 				L = 1
 			}
 			partial := contents[L : R+1]
-			copy(arch.Regs.A.Bytes[6-len(partial):], partial)
+			copy(arch.Regs.A[6-len(partial):], partial)
 		},
 	},
 }
