@@ -14,8 +14,8 @@ func NewByte(data byte) MIXByte {
 }
 
 const (
-	POSITIVE = 0
-	NEGATIVE = 1
+	POS_SIGN = 0
+	NEG_SIGN = 1
 )
 
 // A word in MIX is 5 bytes and a sign.
@@ -62,13 +62,33 @@ func NewDuoByte(data ...byte) MIXDuoByte {
 	return duoByte
 }
 
-/* Instruction format for words used for instructions
-   (sign), A, A, I, F, C
-   C: opcode
-   F: modification (usually field specification, could be something else)
-   (sign)AA: is the address
-   I: index specification, specify rI? to modify effective address (can be [0, 6])
-*/
+// toMIXValue returns the numeric value of a group of
+// continguous MIX bytes.
+// (Using int as return value since a MIX word has
+// 30 bits.)
+// ISSUE: what about sign?
+func toNumValue(mixBytes ...MIXByte) int {
+	value := 0
+	for _, mixByte := range mixBytes {
+		value <<= 6
+		value += mixByte & 63
+	}
+	return value
+}
+
+// toMIXBytes...
+func toMIXBytes(value int64, size byte) []MIXByte {
+	mixBytes := make([]MIXByte, 1, size+1)
+	if value < 0 {
+		mixBytes[0] = NEG_SIGN
+		value = -value
+	}
+	for value > 0 && len(mixBytes) < size {
+		mixBytes = append(mixBytes, newByte(value&63))
+		value >>= 6
+	}
+	return mixBytes
+}
 
 type RegisterSet struct {
 	A                      MIXWord    // accumulator
@@ -117,13 +137,6 @@ func NewMachine() MIXArch {
 		},
 		Mem: make([]MIXWord, 4000),
 	}
-}
-
-// field specification (L:R), expressed as 8L + R
-// Goes from 0 to 5, where 0 is the sign
-func fieldSpec(spec MIXByte) (L, R MIXByte) {
-	L, R = spec/8, spec%8
-	return L, R
 }
 
 // also io devices like cards, tapes, disks
