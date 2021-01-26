@@ -11,8 +11,12 @@ func TestLDA(t *testing.T) {
 		Want    MIXWord // one for result, another for machine-lvl instruction
 	}{
 		{
-			Content: NewWord(NEG_SIGN, 8, 60, 45),
+			Content: NewWord(NEG_SIGN, 8, 60, 4, 5),
 			Inst:    "LDA 2000",
+		},
+		{
+			Content: NewWord(NEG_SIGN, 8, 60, 4, 5),
+			Inst:    "LDA 2000(0:3)",
 		},
 		// NewWord with: list of size > 6, values greater than 63
 	}
@@ -20,9 +24,9 @@ func TestLDA(t *testing.T) {
 	for _, test := range tests {
 		// later inst, err
 		inst := parseInst(test.Inst)
-		machine.WriteCell(test.CellNum, test.Content)
+		copy(machine.Regs.A, NewWord())
+		machine.WriteCell(inst.A(), test.Content)
 		inst.Exec(machine, inst)
-		// Read from cell and check if expected fields were loaded into rA
 		t.Error(machine.Regs.A)
 	}
 }
