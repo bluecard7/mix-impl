@@ -22,11 +22,11 @@ func baseInstCode(L, R, c MIXByte) MIXWord {
 
 // A returns the address portion of inst.Code (sign, A, A).
 // If newA has len 3, then the address is set to it.
-func (inst *Instruction) A(newA ...MIXByte) MIXDuoByte {
+func (inst *Instruction) A(newA ...MIXByte) []MIXByte {
 	if len(newA) == 3 {
 		copy(inst.Code, newA)
 	}
-	return MIXDuoByte(inst.Code[:3])
+	return inst.Code[:3]
 }
 
 // I returns the index portion of inst.Code (I).
@@ -63,7 +63,7 @@ func compressFields(L, R MIXByte) MIXByte {
 // When an Instruction is printed, it will be displayed in the format
 // [(sign)AA][I][F][C]
 func (inst Instruction) String() string {
-	return fmt.Sprintf("INST_REPR") // fmt.Sprintf("[%d][%d][%d][%d]", inst.A(), inst.I(), inst.F(), inst.C())
+	return fmt.Sprintf("%d", inst.C()) // fmt.Sprintf("[%d][%d][%d][%d]", inst.A(), inst.I(), inst.F(), inst.C())
 }
 
 // parseInst takes a string and translate it according to the

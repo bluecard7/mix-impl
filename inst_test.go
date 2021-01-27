@@ -24,21 +24,19 @@ func TestLDA(t *testing.T) {
 		},
 		{
 			Content: NewWord(POS_SIGN),
-			Inst:    "LDA 2500",
+			Inst:    "LDA 2500(4:5)",
 			Code:    NewWord(),
 			Result:  NewWord(),
 		},
 		// NewWord with: list of size > 6, values greater than 63
 	}
 	machine := NewMachine()
-	// Maybe just make Registers its own type, []MIXByte
-	// Makes it alot easier to write tests
 	for _, test := range tests {
 		// later inst, err
 		inst := parseInst(test.Inst)
-		copy(machine.Regs.A, NewWord())
+		copy(machine.R[A], NewWord())
 		machine.WriteCell(inst.A(), test.Content)
 		inst.Exec(machine, inst)
-		t.Error(machine.Regs.A)
+		t.Error(machine.R[A])
 	}
 }

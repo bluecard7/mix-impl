@@ -8,91 +8,61 @@ func (dst InstTemplates) merge(src InstTemplates) {
 	}
 }
 
-func LD(machine *MIXArch, inst *Instruction, register []MIXByte) {
+func LD(machine *MIXArch, inst *Instruction, rIdx int) {
 	contents := machine.ReadCell(inst.A())
 	L, R := inst.F()
-	register[0] = POS_SIGN
+	machine.R[rIdx][0] = POS_SIGN
 	if L == 0 {
-		register[0] = contents[0]
+		machine.R[rIdx][0] = contents[0]
 		L = 1
 	}
 	partial := contents[L : R+1]
-	copy(register[6-len(partial):], partial)
+	copy(machine.R[rIdx][6-len(partial):], partial)
 }
 
-var load = InstTemplates{
-	"LDA": func() *Instruction {
-		return &Instruction{
-			Code: baseInstCode(0, 5, 8),
-			Exec: func(machine *MIXArch, inst *Instruction) {
-				LD(machine, inst, machine.Regs.A)
-			},
-		}
-	},
-	"LD1": func() *Instruction {
-		return &Instruction{
-			Code: baseInstCode(0, 5, 9),
-			Exec: func(machine *MIXArch, inst *Instruction) {
-				LD(machine, inst, machine.Regs.I1)
-			},
-		}
-	},
-	"LD2": func() *Instruction {
-		return &Instruction{
-			Code: baseInstCode(0, 5, 10),
-			Exec: func(machine *MIXArch, inst *Instruction) {
-				LD(machine, inst, machine.Regs.I2)
-			},
-		}
-	},
-	"LD3": func() *Instruction {
-		return &Instruction{
-			Code: baseInstCode(0, 5, 11),
-			Exec: func(machine *MIXArch, inst *Instruction) {
-				LD(machine, inst, machine.Regs.I3)
-			},
-		}
-	},
-	"LD4": func() *Instruction {
-		return &Instruction{
-			Code: baseInstCode(0, 5, 12),
-			Exec: func(machine *MIXArch, inst *Instruction) {
-				LD(machine, inst, machine.Regs.I4)
-			},
-		}
-	},
-	"LD5": func() *Instruction {
-		return &Instruction{
-			Code: baseInstCode(0, 5, 13),
-			Exec: func(machine *MIXArch, inst *Instruction) {
-				LD(machine, inst, machine.Regs.I5)
-			},
-		}
-	},
-	"LD6": func() *Instruction {
-		return &Instruction{
-			Code: baseInstCode(0, 5, 14),
-			Exec: func(machine *MIXArch, inst *Instruction) {
-				LD(machine, inst, machine.Regs.I6)
-			},
-		}
-	},
-	"LDX": func() *Instruction {
-		return &Instruction{
-			Code: baseInstCode(0, 5, 15),
-			Exec: func(machine *MIXArch, inst *Instruction) {
-				LD(machine, inst, machine.Regs.X)
-			},
-		}
-	},
+// load insts, #8 - 15
+var load = func() InstTemplates {
+	load := make(InstTemplates)
+	entries := []struct {
+		Name string
+		R    int
+	}{
+		{"LDA", A},
+		{"LD1", I1},
+		{"LD2", I2},
+		{"LD3", I3},
+		{"LD4", I4},
+		{"LD5", I5},
+		{"LD6", I6},
+		{"LDX", X},
+	}
+	for i, entry := range entries {
+		load[entry.Name] = func(codeOffset, regI int) func() *Instruction {
+			return func() *Instruction {
+				return &Instruction{
+					Code: baseInstCode(0, 5, MIXByte(8+codeOffset)),
+					Exec: func(machine *MIXArch, inst *Instruction) {
+						LD(machine, inst, regI)
+					},
+				}
+			}
+		}(i, entry.R)
+	}
+	return load
+}()
+
+/*
+InstTemplates{
 	//"LDAN": nil, #16
 	//"LDXN": nil, #23
 	//"LDiN": nil, #17-22
 }
+*/
 
+/*
 func ST(machine *MIXArch, inst *Instruction, register []MIXByte) {
 	L, R := inst.F()
-	if len(register) < 6 { // in case of MIXDuoByte
+	if len(register) < 6 { // in case of index or jump register
 		register = append([]MIXByte{register[0], 0, 0, 0}, register[1:]...)
 	}
 	content := machine.ReadCell(inst.A())
@@ -165,7 +135,7 @@ var store = InstTemplates{
 		return &Instruction{
 			Code: baseInstCode(0, 5, 31),
 			Exec: func(machine *MIXArch, inst *Instruction) {
-				ST(machine, inst, machine.Regs.X)
+				ST(machine, inst, machine.R[X])
 			},
 		}
 	},
@@ -184,7 +154,7 @@ var store = InstTemplates{
 		}
 	},
 }
-
+*/
 func aggregateTemplates() InstTemplates {
 	templates := make(InstTemplates)
 	templates.merge(load)

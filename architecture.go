@@ -38,26 +38,6 @@ func NewWord(data ...MIXByte) MIXWord {
 	return word
 }
 
-// A DuoByte is a term used to describe 2 continguous MIX bytes.
-// MIXDuoByte uses a slice of 3 MIXBytes with index 0 for sign.
-type MIXDuoByte []MIXByte
-
-// NewDuoByte returns a MIXDuoByte holding the given data.
-// The given sequence (data) will be interpreted as: the sign, then MIX bytes 1 and 2.
-// If more values are given, they are ignored.
-// The given values will be subject to the conditions stated in NewByte, as
-// each byte in data is converted into a MIXByte through NewByte.
-func NewDuoByte(data ...MIXByte) MIXDuoByte {
-	duoByte := make([]MIXByte, 3)
-	for i, datum := range data {
-		if 3 < i {
-			break
-		}
-		duoByte[i] = NewByte(datum)
-	}
-	return duoByte
-}
-
 // toNum returns the numeric value of a group of continguous MIX bytes.
 // The first MIX byte will be interpreted as a sign (positive or negative).
 // (Using int as return value since a MIX word has 30 bits.)
@@ -88,58 +68,62 @@ func toMIXBytes(value int64, size int) []MIXByte {
 	return mixBytes
 }
 
-type RegisterSet struct {
-	A                      MIXWord    // accumulator
-	X                      MIXWord    // extension
-	I1, I2, I3, I4, I5, I6 MIXDuoByte // index
-	J                      MIXDuoByte // jump address, sign always +
-}
+const (
+	A  = iota // accumulator
+	X         // extension
+	I1        // index
+	I2
+	I3
+	I4
+	I5
+	I6
+	J // jump, sign always +
+)
 
-type ComparisonIndicator struct {
-	Less, Equal, Greater bool
-}
+type Register []MIXByte
 
 // MIXArch defines the hardware/architecture elements of the MIX machine
 type MIXArch struct {
-	Regs           RegisterSet
-	Mem            []MIXWord
-	OverflowToggle bool
-	Compare        ComparisonIndicator
+	R                   []Register
+	Mem                 []MIXWord
+	OverflowToggle      bool
+	ComparisonIndicator struct {
+		Less, Equal, Greater bool
+	}
 }
 
 // WriteCell (copies/assigns) the given data to the memory cell specified by number.
-// Consider using DuoByte for cell, cause that's how it works in the machine
-// If so needs function to translate values across continguous MIX bytes
-func (machine MIXArch) WriteCell(address MIXDuoByte, data MIXWord) {
+func (machine MIXArch) WriteCell(address []MIXByte, data MIXWord) {
 	copy(machine.Mem[toNum(address...)], data)
 }
 
 // ReadCell returns the MIX word at the memory cell at cellNum.
-func (machine MIXArch) ReadCell(address MIXDuoByte) MIXWord {
+func (machine MIXArch) ReadCell(address []MIXByte) MIXWord {
 	return machine.Mem[toNum(address...)]
 }
 
 // NewMachine creates a new instance of MIXArch
 func NewMachine() *MIXArch {
-	mem := make([]MIXWord, 4000)
-	for i := range mem {
-		mem[i] = NewWord()
+	machine := &MIXArch{
+		R:   make([]Register, 9),
+		Mem: make([]MIXWord, 4000),
+		ComparisonIndicator: struct {
+			Less, Equal, Greater bool
+		}{},
 	}
-	return &MIXArch{
-		Regs: RegisterSet{
-			A:  NewWord(),
-			X:  NewWord(),
-			I1: NewDuoByte(),
-			I2: NewDuoByte(),
-			I3: NewDuoByte(),
-			I4: NewDuoByte(),
-			I5: NewDuoByte(),
-			I6: NewDuoByte(),
-			J:  NewDuoByte(),
-		},
-		Mem:     mem,
-		Compare: ComparisonIndicator{},
+	machine.R[A] = make(Register, 6)
+	machine.R[X] = make(Register, 6)
+	machine.R[I1] = make(Register, 3)
+	machine.R[I2] = make(Register, 3)
+	machine.R[I3] = make(Register, 3)
+	machine.R[I4] = make(Register, 3)
+	machine.R[I5] = make(Register, 3)
+	machine.R[I6] = make(Register, 3)
+	machine.R[J] = make(Register, 3)
+	for i := range machine.Mem {
+		machine.Mem[i] = NewWord()
 	}
+	return machine
 }
 
 // also io devices like cards, tapes, disks
