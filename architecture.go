@@ -111,8 +111,7 @@ type MIXArch struct {
 // Consider using DuoByte for cell, cause that's how it works in the machine
 // If so needs function to translate values across continguous MIX bytes
 func (machine MIXArch) WriteCell(address MIXDuoByte, data MIXWord) {
-	// copy or assign?
-	machine.Mem[toNum(address...)] = data
+	copy(machine.Mem[toNum(address...)], data)
 }
 
 // ReadCell returns the MIX word at the memory cell at cellNum.
@@ -122,6 +121,10 @@ func (machine MIXArch) ReadCell(address MIXDuoByte) MIXWord {
 
 // NewMachine creates a new instance of MIXArch
 func NewMachine() *MIXArch {
+	mem := make([]MIXWord, 4000)
+	for i := range mem {
+		mem[i] = NewWord()
+	}
 	return &MIXArch{
 		Regs: RegisterSet{
 			A:  NewWord(),
@@ -134,7 +137,7 @@ func NewMachine() *MIXArch {
 			I6: NewDuoByte(),
 			J:  NewDuoByte(),
 		},
-		Mem:     make([]MIXWord, 4000),
+		Mem:     mem,
 		Compare: ComparisonIndicator{},
 	}
 }

@@ -75,14 +75,15 @@ func parseInst(notation string) (inst *Instruction) {
 	// Groups are: op, address, index, L, R
 	re := regexp.MustCompile(`^([A-Z]+) ([0-9]+)(?:,([1-6]))?(?:\(([0-5]):([0-5])\))?$`)
 	matches := re.FindStringSubmatch(notation)
-	inst = instTemplates[matches[1]]()
-	addressVal, _ := strconv.ParseInt(matches[2], 10, 16)
+	op, address, index, L, R := matches[1], matches[2], matches[3], matches[4], matches[5]
+	inst = templates[op]()
+	addressVal, _ := strconv.ParseInt(address, 10, 16)
 	inst.A(toMIXBytes(addressVal, 2)...)
-	if index := matches[3]; index != "" {
+	if index != "" {
 		indexVal, _ := strconv.ParseInt(index, 10, 8)
 		inst.I(MIXByte(indexVal))
 	}
-	if L, R := matches[4], matches[5]; L != "" {
+	if L != "" {
 		LVal, _ := strconv.ParseInt(L, 10, 8)
 		RVal, _ := strconv.ParseInt(R, 10, 8)
 		inst.F(MIXByte(LVal), MIXByte(RVal))
