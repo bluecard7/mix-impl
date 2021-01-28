@@ -19,7 +19,7 @@ func LD(inst *Instruction, dst Register, content []MIXByte) {
 	copy(dst[len(dst)-len(partial):], partial)
 }
 
-// load insts, #8 - 15
+// load insts, #8 - 23
 func loads() InstTemplates {
 	templates := make(InstTemplates)
 	entries := []struct {
@@ -34,31 +34,7 @@ func loads() InstTemplates {
 		{"LD5", I5},
 		{"LD6", I6},
 		{"LDX", X},
-	}
-	for i, entry := range entries {
-		templates[entry.Name] = func(codeOffset, regI int) func() *Instruction {
-			return func() *Instruction {
-				return &Instruction{
-					Code: baseInstCode(0, 5, MIXByte(8+codeOffset)),
-					Exec: func(machine *MIXArch, inst *Instruction) {
-						content := machine.ReadCell(inst.A())
-						LD(inst, machine.R[regI], content)
-					},
-				}
-			}
-		}(i, entry.R)
-	}
-	return templates
-}
-
-// load negative insts, #16 - 23
-func loadNs() InstTemplates {
-	templates := make(InstTemplates)
-	entries := []struct {
-		Name string
-		R    int
-	}{
-		{"LDAN", A},
+		{"LDAN", A}, // load negative
 		{"LD1N", I1},
 		{"LD2N", I2},
 		{"LD3N", I3},
@@ -71,14 +47,12 @@ func loadNs() InstTemplates {
 		templates[entry.Name] = func(codeOffset, regI int) func() *Instruction {
 			return func() *Instruction {
 				return &Instruction{
-					Code: baseInstCode(0, 5, MIXByte(16+codeOffset)),
+					Code: baseInstCode(0, 5, MIXByte(8+codeOffset)),
 					Exec: func(machine *MIXArch, inst *Instruction) {
 						content := machine.ReadCell(inst.A())
-						switch content[0] {
-						case POS_SIGN:
-							content[0] = NEG_SIGN
-						case NEG_SIGN:
-							content[0] = POS_SIGN
+						if 15 < 8+codeOffset {
+							// maybe just define on MIXWord?
+							MIXBytes(content).negate()
 						}
 						LD(inst, machine.R[regI], content)
 					},
@@ -103,6 +77,7 @@ func ST(machine *MIXArch, inst *Instruction, r Register) {
 	machine.WriteCell(inst.A(), content)
 }
 
+// store insts, #24-33
 func stores() InstTemplates {
 	entries := []struct {
 		Name string
@@ -142,7 +117,6 @@ func stores() InstTemplates {
 func aggregateTemplates() InstTemplates {
 	templates := make(InstTemplates)
 	templates.merge(loads())
-	templates.merge(loadNs())
 	templates.merge(stores())
 	return templates
 }

@@ -1,6 +1,7 @@
 package main
 
 type MIXByte byte
+type MIXBytes []MIXByte
 
 // NewByte returns a MIXByte with the value of the given data.
 // Since a byte in MIX needs to hold at least 64 distinct values,
@@ -17,6 +18,17 @@ const (
 	POS_SIGN = 0
 	NEG_SIGN = 1
 )
+
+// negate takes b and treats the MIXByte at index 0 as a sign.
+// It negates b[0], making positive negative, and vice versa.
+func (b MIXBytes) negate() {
+	switch b[0] {
+	case POS_SIGN:
+		b[0] = NEG_SIGN
+	case NEG_SIGN:
+		b[0] = POS_SIGN
+	}
+}
 
 // A word in MIX is 5 bytes and a sign.
 // MIXWord uses a slice of 6 MIXBytes with index 0 for sign.
