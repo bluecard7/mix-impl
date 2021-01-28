@@ -30,6 +30,16 @@ func (b MIXBytes) negate() {
 	}
 }
 
+// Equals method for slice of MIXBytes
+func (left MIXBytes) Equals(right MIXBytes) bool {
+	for i, v := range left {
+		if v != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // A word in MIX is 5 bytes and a sign.
 // MIXWord uses a slice of 6 MIXBytes with index 0 for sign.
 type MIXWord []MIXByte
@@ -50,6 +60,10 @@ func NewWord(data ...MIXByte) MIXWord {
 	return word
 }
 
+func (w MIXWord) Raw() MIXBytes {
+	return MIXBytes(w)
+}
+
 // toNum returns the numeric value of a group of continguous MIX bytes.
 // The first MIX byte will be interpreted as a sign (positive or negative).
 // (Using int as return value since a MIX word has 30 bits.)
@@ -68,13 +82,13 @@ func toNum(mixBytes ...MIXByte) int {
 // toMIXBytes converts the given value to a slice of MIX bytes with len size.
 // The value will be truncated if it exceeds the allowed capacity.
 func toMIXBytes(value int64, size int) []MIXByte {
-	mixBytes := make([]MIXByte, 1, size+1)
+	mixBytes := make([]MIXByte, size+1)
 	if value < 0 {
 		mixBytes[0] = NEG_SIGN
 		value = -value
 	}
-	for value > 0 && len(mixBytes) < size {
-		mixBytes = append(mixBytes, NewByte(MIXByte(value&63)))
+	for i := len(mixBytes) - 1; i > 0 && value > 0; i-- {
+		mixBytes[i] = NewByte(MIXByte(value & 63))
 		value >>= 6
 	}
 	return mixBytes
@@ -93,6 +107,10 @@ const (
 )
 
 type Register []MIXByte
+
+func (r Register) Raw() MIXBytes {
+	return MIXBytes(r)
+}
 
 // MIXArch defines the hardware/architecture elements of the MIX machine
 type MIXArch struct {

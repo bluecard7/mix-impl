@@ -66,27 +66,54 @@ func (inst Instruction) String() string {
 	return fmt.Sprintf("%d", inst.C()) // fmt.Sprintf("[%d][%d][%d][%d]", inst.A(), inst.I(), inst.F(), inst.C())
 }
 
-// parseInst takes a string and translate it according to the
+var (
+	OpErr      = fmt.Errorf("Operation is not defined")
+	AddressErr = fmt.Errorf("Address not defined, want number in [0,4000)")
+	IndexErr   = fmt.Errorf("Index not defined, want number in [1, 6]")
+	FieldErr   = fmt.Errorf("Field not defined, want number in [0, 5] and L <= R")
+)
+
+// ParseInst takes a string and translate it according to the
 // following notation: "OP ADDRESS, I(F)".
 // If I is omitted, then it is treated as 0.
 // If F is omitted, then it is treated as the normal F specification
 // (This is (0:5) for most operators, could be something else).
-func parseInst(notation string) (inst *Instruction) {
-	// Groups are: op, address, index, L, R
+func ParseInst(notation string) (*Instruction, error) {
 	re := regexp.MustCompile(`^([A-Z]+) ([0-9]+)(?:,([1-6]))?(?:\(([0-5]):([0-5])\))?$`)
 	matches := re.FindStringSubmatch(notation)
 	op, address, index, L, R := matches[1], matches[2], matches[3], matches[4], matches[5]
-	inst = templates[op]()
-	addressVal, _ := strconv.ParseInt(address, 10, 16)
-	inst.A(toMIXBytes(addressVal, 2)...)
+	template, ok := templates[op]
+	if !ok {
+		return nil, OpErr
+	}
+	inst := template()
+	var (
+		v   int64
+		err error
+	)
+	v, err = strconv.ParseInt(address, 10, 16)
+	if err != nil || v < 0 || 3999 < v {
+		return nil, AddressErr
+	}
+	inst.A(toMIXBytes(v, 2)...)
 	if index != "" {
-		indexVal, _ := strconv.ParseInt(index, 10, 8)
-		inst.I(MIXByte(indexVal))
+		v, err = strconv.ParseInt(index, 10, 8)
+		if err != nil || v < 0 || 6 < v {
+			return nil, IndexErr
+		}
+		inst.I(MIXByte(v))
 	}
 	if L != "" {
-		LVal, _ := strconv.ParseInt(L, 10, 8)
-		RVal, _ := strconv.ParseInt(R, 10, 8)
-		inst.F(MIXByte(LVal), MIXByte(RVal))
+		v, err = strconv.ParseInt(L, 10, 8)
+		if err != nil || v < 0 || 5 < v {
+			return nil, FieldErr
+		}
+		LVal := v
+		v, err = strconv.ParseInt(R, 10, 8)
+		if err != nil || v < 0 || 5 < v || LVal > v {
+			return nil, FieldErr
+		}
+		inst.F(MIXByte(LVal), MIXByte(v))
 	}
-	return inst
+	return inst, nil
 }
