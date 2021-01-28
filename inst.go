@@ -1,21 +1,22 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 )
 
 type Instruction struct {
-	Code MIXWord // mix machine code (sign, A, A, I, F,C)
-	Time int     // time it takes to execute instruction
+	Code MIXBytes // mix machine code (sign, A, A, I, F,C)
+	Time int      // time it takes to execute instruction
 	Exec func(machine *MIXArch, inst *Instruction)
 }
 
 // baseInstCode returns a MIX word that represents the default information
 // format. The defaults are no address, no index register, and the given field range
 // and op code c.
-func baseInstCode(L, R, c MIXByte) MIXWord {
+func baseInstCode(L, R, c MIXByte) MIXBytes {
 	f := compressFields(L, R)
 	return NewWord(POS_SIGN, 0, 0, 0, f, c)
 }
@@ -67,10 +68,11 @@ func (inst Instruction) String() string {
 }
 
 var (
-	OpErr      = fmt.Errorf("Operation is not defined")
-	AddressErr = fmt.Errorf("Address not defined, want number in [0,4000)")
-	IndexErr   = fmt.Errorf("Index not defined, want number in [1, 6]")
-	FieldErr   = fmt.Errorf("Field not defined, want number in [0, 5] and L <= R")
+	ErrRegex   = errors.New("Invalid characters detected in one or more fields, want \"op address,index(L:R)\" where op is a string and address, index, L, and R are numbers, \",index\" and \"(L:R)\"  are optional")
+	ErrOp      = errors.New("Operation is not defined")
+	ErrAddress = errors.New("Address not defined, want number")
+	ErrIndex   = errors.New("Index not defined, want number in [1, 6]")
+	ErrField   = errors.New("Field not defined, want number in [0, 5] and L <= R")
 )
 
 // ParseInst takes a string and translate it according to the
@@ -79,12 +81,16 @@ var (
 // If F is omitted, then it is treated as the normal F specification
 // (This is (0:5) for most operators, could be something else).
 func ParseInst(notation string) (*Instruction, error) {
-	re := regexp.MustCompile(`^([A-Z]+) ([0-9]+)(?:,([1-6]))?(?:\(([0-5]):([0-5])\))?$`)
+	re := regexp.MustCompile(`^([A-Z]+) ([0-9]+|-[0-9]+)(?:,([0-9]+))?(?:\(([0-9]+):([0-9]+)\))?$`)
+	if !re.MatchString(notation) {
+		return nil, ErrRegex
+	}
 	matches := re.FindStringSubmatch(notation)
 	op, address, index, L, R := matches[1], matches[2], matches[3], matches[4], matches[5]
+
 	template, ok := templates[op]
 	if !ok {
-		return nil, OpErr
+		return nil, ErrOp
 	}
 	inst := template()
 	var (
@@ -92,26 +98,26 @@ func ParseInst(notation string) (*Instruction, error) {
 		err error
 	)
 	v, err = strconv.ParseInt(address, 10, 16)
-	if err != nil || v < 0 || 3999 < v {
-		return nil, AddressErr
+	if err != nil {
+		return nil, ErrAddress
 	}
 	inst.A(toMIXBytes(v, 2)...)
 	if index != "" {
 		v, err = strconv.ParseInt(index, 10, 8)
 		if err != nil || v < 0 || 6 < v {
-			return nil, IndexErr
+			return nil, ErrIndex
 		}
 		inst.I(MIXByte(v))
 	}
 	if L != "" {
 		v, err = strconv.ParseInt(L, 10, 8)
 		if err != nil || v < 0 || 5 < v {
-			return nil, FieldErr
+			return nil, ErrField
 		}
 		LVal := v
 		v, err = strconv.ParseInt(R, 10, 8)
 		if err != nil || v < 0 || 5 < v || LVal > v {
-			return nil, FieldErr
+			return nil, ErrField
 		}
 		inst.F(MIXByte(LVal), MIXByte(v))
 	}

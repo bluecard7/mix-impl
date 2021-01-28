@@ -32,6 +32,9 @@ func (b MIXBytes) negate() {
 
 // Equals method for slice of MIXBytes
 func (left MIXBytes) Equals(right MIXBytes) bool {
+	if len(left) != len(right) {
+		return false
+	}
 	for i, v := range left {
 		if v != right[i] {
 			return false
@@ -40,16 +43,12 @@ func (left MIXBytes) Equals(right MIXBytes) bool {
 	return true
 }
 
-// A word in MIX is 5 bytes and a sign.
-// MIXWord uses a slice of 6 MIXBytes with index 0 for sign.
-type MIXWord []MIXByte
-
-// NewWord returns a MIXWord holding the given data.
+// NewWord returns MIXBytes(len 6) holding the given data.
 // The given sequence (data) will be interpreted as: the sign, then MIX bytes 1, 2, ..., 5.
 // If more values are given, they are ignored.
 // The given values will be subject to the conditions stated in NewByte, as
 // each byte in data is converted into a MIXByte through NewByte.
-func NewWord(data ...MIXByte) MIXWord {
+func NewWord(data ...MIXByte) MIXBytes {
 	word := make([]MIXByte, 6)
 	for i, datum := range data {
 		if 6 < i {
@@ -58,10 +57,6 @@ func NewWord(data ...MIXByte) MIXWord {
 		word[i] = NewByte(datum)
 	}
 	return word
-}
-
-func (w MIXWord) Raw() MIXBytes {
-	return MIXBytes(w)
 }
 
 // toNum returns the numeric value of a group of continguous MIX bytes.
@@ -81,7 +76,7 @@ func toNum(mixBytes ...MIXByte) int {
 
 // toMIXBytes converts the given value to a slice of MIX bytes with len size.
 // The value will be truncated if it exceeds the allowed capacity.
-func toMIXBytes(value int64, size int) []MIXByte {
+func toMIXBytes(value int64, size int) MIXBytes {
 	mixBytes := make([]MIXByte, size+1)
 	if value < 0 {
 		mixBytes[0] = NEG_SIGN
@@ -106,7 +101,8 @@ const (
 	J // jump, sign always +
 )
 
-type Register []MIXByte
+// Registers use the index 0 as sign and the rest for data
+type Register MIXBytes
 
 func (r Register) Raw() MIXBytes {
 	return MIXBytes(r)
@@ -115,7 +111,7 @@ func (r Register) Raw() MIXBytes {
 // MIXArch defines the hardware/architecture elements of the MIX machine
 type MIXArch struct {
 	R                   []Register
-	Mem                 []MIXWord
+	Mem                 []MIXBytes
 	OverflowToggle      bool
 	ComparisonIndicator struct {
 		Less, Equal, Greater bool
@@ -123,12 +119,12 @@ type MIXArch struct {
 }
 
 // WriteCell (copies/assigns) the given data to the memory cell specified by number.
-func (machine MIXArch) WriteCell(address []MIXByte, data MIXWord) {
+func (machine MIXArch) WriteCell(address MIXBytes, data MIXBytes) {
 	copy(machine.Mem[toNum(address...)], data)
 }
 
 // ReadCell returns the MIX word at the memory cell at cellNum.
-func (machine MIXArch) ReadCell(address []MIXByte) MIXWord {
+func (machine MIXArch) ReadCell(address MIXBytes) MIXBytes {
 	return machine.Mem[toNum(address...)]
 }
 
@@ -136,7 +132,7 @@ func (machine MIXArch) ReadCell(address []MIXByte) MIXWord {
 func NewMachine() *MIXArch {
 	machine := &MIXArch{
 		R:   make([]Register, 9),
-		Mem: make([]MIXWord, 4000),
+		Mem: make([]MIXBytes, 4000),
 		ComparisonIndicator: struct {
 			Less, Equal, Greater bool
 		}{},
