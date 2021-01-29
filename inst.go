@@ -81,7 +81,7 @@ var (
 // If F is omitted, then it is treated as the normal F specification
 // (This is (0:5) for most operators, could be something else).
 func ParseInst(notation string) (*Instruction, error) {
-	re := regexp.MustCompile(`^([A-Z]+) ([0-9]+|-[0-9]+)(?:,([0-9]+))?(?:\(([0-9]+):([0-9]+)\))?$`)
+	re := regexp.MustCompile(`^([A-Z1-6]+) ([0-9]+|-[0-9]+)(?:,([0-9]+))?(?:\(([0-9]+):([0-9]+)\))?$`)
 	if !re.MatchString(notation) {
 		return nil, ErrRegex
 	}

@@ -15,8 +15,11 @@ func LD(inst *Instruction, dst Register, content []MIXByte) {
 		dst[0] = content[0]
 		L = 1
 	}
-	partial := content[L : R+1]
-	copy(dst[len(dst)-len(partial):], partial)
+	partial, amtToCpy, actualSize := content[L:R+1], R-L+1, R-L+1
+	if len(dst) < WORD_SIZE && 2 < amtToCpy { // index registers
+		amtToCpy = 2
+	}
+	copy(dst[len(dst)-int(amtToCpy):], partial[actualSize-amtToCpy:])
 }
 
 // load insts, #8 - 23
@@ -34,7 +37,7 @@ func loads() InstTemplates {
 		{"LD5", I5},
 		{"LD6", I6},
 		{"LDX", X},
-		{"LDAN", A}, // load negative
+		{"LDAN", A}, // load negative versions
 		{"LD1N", I1},
 		{"LD2N", I2},
 		{"LD3N", I3},
@@ -44,15 +47,15 @@ func loads() InstTemplates {
 		{"LDXN", X},
 	}
 	for i, entry := range entries {
-		templates[entry.Name] = func(codeOffset, regI int) func() *Instruction {
+		templates[entry.Name] = func(opOffset, regI int) func() *Instruction {
 			return func() *Instruction {
+				op := MIXByte(8 + opOffset)
 				return &Instruction{
-					Code: baseInstCode(0, 5, MIXByte(8+codeOffset)),
+					Code: baseInstCode(0, 5, op),
 					Exec: func(machine *MIXArch, inst *Instruction) {
 						content := machine.ReadCell(inst.A())
-						if 15 < 8+codeOffset {
-							// maybe just define on MIXWord?
-							MIXBytes(content).negate()
+						if 15 < op {
+							content.negate()
 						}
 						LD(inst, machine.R[regI], content)
 					},
@@ -63,17 +66,14 @@ func loads() InstTemplates {
 	return templates
 }
 
-func ST(machine *MIXArch, inst *Instruction, r Register) {
+func ST(machine *MIXArch, inst *Instruction, src Register) {
 	L, R := inst.F()
-	if len(r) < 6 { // in case of index or jump register
-		r = append([]MIXByte{r[0], 0, 0, 0}, r[1:]...)
-	}
 	content := machine.ReadCell(inst.A())
 	if L == 0 { // if sign is included
-		content[0] = r[0]
+		content[0] = src[0]
 		L = 1
 	}
-	copy(content[L:R+1], r[6-(R-L+1):])
+	copy(content[L:R+1], src[len(src)-int(R-L+1):])
 	machine.WriteCell(inst.A(), content)
 }
 
@@ -96,13 +96,21 @@ func stores() InstTemplates {
 	}
 	templates := make(InstTemplates)
 	for i, entry := range entries {
-		templates[entry.Name] = func(codeOffset, regI int) func() *Instruction {
+		templates[entry.Name] = func(opOffset, regI int) func() *Instruction {
 			return func() *Instruction {
+				op := MIXByte(24 + opOffset)
+				var L, R MIXByte = 0, 5
+				if op == 32 { // STJ
+					R = 2
+				}
 				return &Instruction{
-					Code: baseInstCode(0, 5, MIXByte(24+codeOffset)),
+					Code: baseInstCode(L, R, op),
 					Exec: func(machine *MIXArch, inst *Instruction) {
 						r := machine.R[regI]
-						if entry.Name == "STZ" {
+						if I1 <= regI || regI <= I6 { // using index register
+							r = append([]MIXByte{r[0], 0, 0, 0}, r[1:]...)
+						}
+						if op == 33 { // STZ
 							r = Register(NewWord())
 						}
 						ST(machine, inst, r)

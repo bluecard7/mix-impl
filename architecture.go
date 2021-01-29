@@ -17,6 +17,8 @@ func NewByte(data MIXByte) MIXByte {
 const (
 	POS_SIGN = 0
 	NEG_SIGN = 1
+
+	WORD_SIZE = 6
 )
 
 // negate takes b and treats the MIXByte at index 0 as a sign.

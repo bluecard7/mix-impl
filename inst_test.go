@@ -42,38 +42,48 @@ func TestParseInst(t *testing.T) {
 // TestLD tests load and load negative instructions.
 func TestLD(t *testing.T) {
 	tests := []struct {
-		Content MIXBytes
-		Line    string
-		RegI    int
-		Result  MIXBytes
+		Line string
+		RegI int
+		Want MIXBytes
 	}{
 		{
-			Content: NewWord(NEG_SIGN, 1, 2, 3, 4, 5),
-			Line:    "LDA 2000",
-			RegI:    A,
-			Result:  MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5},
+			Line: "LDA 2000",
+			RegI: A,
+			Want: MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5},
 		},
 		{
-			Content: NewWord(NEG_SIGN, 1, 2, 3, 4, 5),
-			Line:    "LDA 2000(0:3)",
-			RegI:    A,
-			Result:  MIXBytes{NEG_SIGN, 0, 0, 1, 2, 3},
+			Line: "LDA 2000(0:3)",
+			RegI: A,
+			Want: MIXBytes{NEG_SIGN, 0, 0, 1, 2, 3},
 		},
 		{
-			Content: NewWord(NEG_SIGN, 1, 2, 3, 4, 5),
-			Line:    "LDA 2000,4(4:5)", // has no effect as of now since rI? are all zeros
-			RegI:    A,
-			Result:  MIXBytes{POS_SIGN, 0, 0, 0, 4, 5},
+			Line: "LDA 2000,4(4:5)", // has no effect as of now since rI_ are all zeros
+			RegI: A,
+			Want: MIXBytes{POS_SIGN, 0, 0, 0, 4, 5},
 		},
 		// NewWord with: list of size > 6, values greater than 63 -> separately test
+		{
+			Line: "LD1 2000", // ignores bytes 1-3, book says undefined if set to nonzero #
+			RegI: I1,
+			Want: MIXBytes{NEG_SIGN, 4, 5},
+		},
+		{
+			Line: "LDAN 2000",
+			RegI: A,
+			Want: MIXBytes{POS_SIGN, 1, 2, 3, 4, 5},
+		},
 	}
 	for _, test := range tests {
-		inst, _ := ParseInst(test.Line)
-		copy(machine.R[test.RegI], NewWord()) // resets register
-		machine.WriteCell(inst.A(), test.Content)
+		inst, err := ParseInst(test.Line)
+		if err != nil {
+			t.Errorf("Error parsing %s: %v", test.Line, err)
+		}
+		copy(machine.R[test.RegI], NewWord())                          // resets register
+		machine.WriteCell(inst.A(), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
 		inst.Exec(machine, inst)
-		if !test.Result.Equals(machine.R[test.RegI].Raw()) {
-			t.Errorf("Incorrect result for %s: want %v, got %v", test.Line, test.Result, machine.R[test.RegI])
+		result := machine.R[test.RegI].Raw()
+		if !test.Want.Equals(result) {
+			t.Errorf("Incorrect result for %s: want %v, got %v", test.Line, test.Want, result)
 		}
 	}
 }
@@ -81,13 +91,59 @@ func TestLD(t *testing.T) {
 // TestST tests store instructions.
 func TestST(t *testing.T) {
 	tests := []struct {
-		Content MIXBytes
 		Line    string
 		RegI    int
-	}{}
+		RegData MIXBytes // data in register
+		Want    MIXBytes // stored result in cell
+	}{
+		{
+			Line:    "STA 2000",
+			RegI:    A,
+			RegData: MIXBytes{POS_SIGN, 6, 7, 8, 9, 0},
+			Want:    MIXBytes{POS_SIGN, 6, 7, 8, 9, 0},
+		},
+		{
+			Line:    "STA 2000(2:3)",
+			RegI:    A,
+			RegData: MIXBytes{POS_SIGN, 6, 7, 8, 9, 0},
+			Want:    MIXBytes{NEG_SIGN, 1, 9, 0, 4, 5},
+		},
+		{
+			Line:    "ST1 2000",
+			RegI:    I1,
+			RegData: MIXBytes{POS_SIGN, 9, 9},
+			Want:    MIXBytes{POS_SIGN, 0, 0, 0, 9, 9},
+		},
+		{
+			Line:    "ST1 2000(0:3)",
+			RegI:    I1,
+			RegData: MIXBytes{POS_SIGN, 9, 9},
+			Want:    MIXBytes{POS_SIGN, 0, 9, 9, 4, 5},
+		},
+		{
+			Line:    "STJ 2000",
+			RegI:    J,
+			RegData: MIXBytes{POS_SIGN, 9, 9},
+			Want:    MIXBytes{POS_SIGN, 9, 9, 3, 4, 5},
+		},
+		{
+			Line:    "STZ 2000",
+			RegI:    I1,
+			RegData: MIXBytes{POS_SIGN, 6, 7, 8, 9, 0},
+			Want:    MIXBytes{POS_SIGN, 0, 0, 0, 0, 0},
+		},
+	}
 	for _, test := range tests {
-		inst, _ := ParseInst(test.Line)
-		copy(machine.R[test.RegI], MIXBytes{POS_SIGN, 6, 7, 8, 9, 0})
-		machine.WriteCell(inst.A(), test.Content)
+		inst, err := ParseInst(test.Line)
+		if err != nil {
+			t.Fatalf("Error parsing %s: %v", test.Line, err)
+		}
+		copy(machine.R[test.RegI], test.RegData)
+		machine.WriteCell(inst.A(), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
+		inst.Exec(machine, inst)
+		result := machine.ReadCell(inst.A())
+		if !test.Want.Equals(result) {
+			t.Errorf("Incorrect result for %s: want %v, got %v", test.Line, test.Want, result)
+		}
 	}
 }
