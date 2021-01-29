@@ -147,3 +147,41 @@ func TestST(t *testing.T) {
 		}
 	}
 }
+
+func TestArithmetic(t *testing.T) {
+	/*	tests := []struct {
+		}{}
+		for _, test := range tests {
+			inst, err := ParseInst(test.Line)
+			if err != nil {
+				t.Fatalf("Error parsing %s: %v", test.Line, err)
+			}
+		}*/
+}
+
+func TestAddressTransfer(t *testing.T) {
+}
+
+func TestComparison(t *testing.T) {
+}
+
+func TestJump(t *testing.T) {
+}
+
+func TestShift(t *testing.T) {
+}
+
+func TestMove(t *testing.T) {
+}
+
+func TestNop(t *testing.T) {
+}
+
+func TestHalt(t *testing.T) {
+}
+
+func TestIO(t *testing.T) {
+}
+
+func TestConversion(t *testing.T) {
+}

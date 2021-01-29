@@ -8,18 +8,18 @@ func (dst InstTemplates) merge(src InstTemplates) {
 	}
 }
 
-func LD(inst *Instruction, dst Register, content []MIXByte) {
+func ld(inst *Instruction, dst Register, content MIXBytes) {
 	L, R := inst.F()
 	dst[0] = POS_SIGN
 	if L == 0 {
 		dst[0] = content[0]
 		L = 1
 	}
-	partial, amtToCpy, actualSize := content[L:R+1], R-L+1, R-L+1
-	if len(dst) < WORD_SIZE && 2 < amtToCpy { // index registers
-		amtToCpy = 2
+	partial, amtToCpy, actualSize := content[L:R+1], int(R-L+1), int(R-L+1)
+	if len(dst) < WORD_SIZE && len(dst)-1 < amtToCpy { // index registers
+		amtToCpy = len(dst) - 1
 	}
-	copy(dst[len(dst)-int(amtToCpy):], partial[actualSize-amtToCpy:])
+	copy(dst[len(dst)-amtToCpy:], partial[actualSize-amtToCpy:])
 }
 
 // load insts, #8 - 23
@@ -57,7 +57,7 @@ func loads() InstTemplates {
 						if 15 < op {
 							content.negate()
 						}
-						LD(inst, machine.R[regI], content)
+						ld(inst, machine.R[regI], content)
 					},
 				}
 			}
@@ -66,7 +66,7 @@ func loads() InstTemplates {
 	return templates
 }
 
-func ST(machine *MIXArch, inst *Instruction, src Register) {
+func st(machine *MIXArch, inst *Instruction, src Register) {
 	L, R := inst.F()
 	content := machine.ReadCell(inst.A())
 	if L == 0 { // if sign is included
@@ -108,18 +108,57 @@ func stores() InstTemplates {
 					Exec: func(machine *MIXArch, inst *Instruction) {
 						r := machine.R[regI]
 						if I1 <= regI || regI <= I6 { // using index register
-							r = append([]MIXByte{r[0], 0, 0, 0}, r[1:]...)
+							r = append(Register{r[0], 0, 0, 0}, r[1:]...)
 						}
 						if op == 33 { // STZ
 							r = Register(NewWord())
 						}
-						ST(machine, inst, r)
+						st(machine, inst, r)
 					},
 				}
 			}
 		}(i, entry.R)
 	}
 	return templates
+}
+
+func arithmetic() InstTemplates {
+	return InstTemplates{
+		"ADD": func() *Instruction {
+			return &Instruction{
+				Code: baseInstCode(0, 5, 1),
+				Exec: func(machine *MIXArch, inst *Instruction) {
+					L, R := inst.F()
+					v := machine.ReadCell(inst.A())[L : R+1]
+					if 0 < L {
+						v = append(MIXBytes{POS_SIGN}, v...)
+					}
+					// just return int64 from toNum?
+					sum := toNum(machine.R[A]...) + toNum(v...)
+					if sum > 2<<31-1 {
+						machine.OverflowToggle = true
+					}
+					// not sure if toMIXBytes works as intended here
+					copy(machine.R[A], toMIXBytes(int64(sum), 5))
+				},
+			}
+		},
+		"SUB": func() *Instruction {
+			return &Instruction{
+				Code: baseInstCode(0, 5, 2),
+			}
+		},
+		"MUL": func() *Instruction {
+			return &Instruction{
+				Code: baseInstCode(0, 5, 3),
+			}
+		},
+		"DIV": func() *Instruction {
+			return &Instruction{
+				Code: baseInstCode(0, 5, 4),
+			}
+		},
+	}
 }
 
 func aggregateTemplates() InstTemplates {

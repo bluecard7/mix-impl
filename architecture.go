@@ -51,7 +51,7 @@ func (left MIXBytes) Equals(right MIXBytes) bool {
 // The given values will be subject to the conditions stated in NewByte, as
 // each byte in data is converted into a MIXByte through NewByte.
 func NewWord(data ...MIXByte) MIXBytes {
-	word := make([]MIXByte, 6)
+	word := make(MIXBytes, 6)
 	for i, datum := range data {
 		if 6 < i {
 			break
@@ -79,7 +79,7 @@ func toNum(mixBytes ...MIXByte) int {
 // toMIXBytes converts the given value to a slice of MIX bytes with len size.
 // The value will be truncated if it exceeds the allowed capacity.
 func toMIXBytes(value int64, size int) MIXBytes {
-	mixBytes := make([]MIXByte, size+1)
+	mixBytes := make(MIXBytes, size+1)
 	if value < 0 {
 		mixBytes[0] = NEG_SIGN
 		value = -value
