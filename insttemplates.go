@@ -55,7 +55,7 @@ func loads() InstTemplates {
 					Exec: func(machine *MIXArch, inst *Instruction) {
 						content := machine.ReadCell(inst.A())
 						if 15 < op {
-							content.negate()
+							content.Negate()
 						}
 						ld(inst, machine.R[regI], content)
 					},
@@ -122,7 +122,15 @@ func stores() InstTemplates {
 	return templates
 }
 
+// add, sub, mul, div, #1-4
 func arithmetic() InstTemplates {
+	mixSum := func(n1, n2 MIXBytes) MIXBytes {
+		sum := toNum(n1) + toNum(n2)
+		if sum > 2<<31-1 {
+			machine.OverflowToggle = true
+		}
+		return toMIXBytes(sum, 5)
+	}
 	return InstTemplates{
 		"ADD": func() *Instruction {
 			return &Instruction{
@@ -133,29 +141,67 @@ func arithmetic() InstTemplates {
 					if 0 < L {
 						v = append(MIXBytes{POS_SIGN}, v...)
 					}
-					// just return int64 from toNum?
-					sum := toNum(machine.R[A]...) + toNum(v...)
-					if sum > 2<<31-1 {
-						machine.OverflowToggle = true
-					}
 					// not sure if toMIXBytes works as intended here
-					copy(machine.R[A], toMIXBytes(int64(sum), 5))
+					copy(machine.R[A], mixSum(machine.R[A].Raw(), v))
 				},
 			}
 		},
 		"SUB": func() *Instruction {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 2),
+				Exec: func(machine *MIXArch, inst *Instruction) {
+					L, R := inst.F()
+					v := machine.ReadCell(inst.A())[L : R+1]
+					if 0 < L {
+						v = append(MIXBytes{POS_SIGN}, v...)
+					}
+					copy(machine.R[A], mixSum(machine.R[A].Raw(), v.Negate()))
+				},
 			}
 		},
 		"MUL": func() *Instruction {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 3),
+				Exec: func(machine *MIXArch, inst *Instruction) {
+					L, R := inst.F()
+					v := machine.ReadCell(inst.A())[L : R+1]
+					if 0 < L {
+						v = append(MIXBytes{POS_SIGN}, v...)
+					}
+					productBytes := toMIXBytes(toNum(machine.R[A].Raw())*toNum(v), 10)
+					copy(machine.R[X], productBytes[:6])
+					copy(machine.R[A][1:], productBytes[6:])
+					copy(machine.R[A], productBytes[:1])
+				},
 			}
 		},
 		"DIV": func() *Instruction {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 4),
+				Exec: func(machine *MIXArch, inst *Instruction) {
+					L, R := inst.F()
+					v := machine.ReadCell(inst.A())[L : R+1]
+					if 0 < L {
+						v = append(MIXBytes{POS_SIGN}, v...)
+					}
+					var quotient, remainder int64
+					den := toNum(v)
+					if den != 0 {
+						numBytes := append(
+							machine.R[A][:1],
+							append(machine.R[X][1:], machine.R[A][1:]...)...,
+						)
+						num := toNum(numBytes.Raw())
+						quotient, remainder = num/den, num%den
+					}
+					if den == 0 || quotient > 2<<31-1 {
+						machine.OverflowToggle = true
+						return
+					}
+					copy(machine.R[X], toMIXBytes(remainder, 5))
+					copy(machine.R[X], machine.R[A][:1])
+					copy(machine.R[A], toMIXBytes(quotient, 5))
+				},
 			}
 		},
 	}
@@ -165,6 +211,7 @@ func aggregateTemplates() InstTemplates {
 	templates := make(InstTemplates)
 	templates.merge(loads())
 	templates.merge(stores())
+	templates.merge(arithmetic())
 	return templates
 }
 

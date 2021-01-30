@@ -21,15 +21,16 @@ const (
 	WORD_SIZE = 6
 )
 
-// negate takes b and treats the MIXByte at index 0 as a sign.
+// Negate takes b and treats the MIXByte at index 0 as a sign.
 // It negates b[0], making positive negative, and vice versa.
-func (b MIXBytes) negate() {
+func (b MIXBytes) Negate() MIXBytes {
 	switch b[0] {
 	case POS_SIGN:
 		b[0] = NEG_SIGN
 	case NEG_SIGN:
 		b[0] = POS_SIGN
 	}
+	return b
 }
 
 // Equals method for slice of MIXBytes
@@ -63,12 +64,11 @@ func NewWord(data ...MIXByte) MIXBytes {
 
 // toNum returns the numeric value of a group of continguous MIX bytes.
 // The first MIX byte will be interpreted as a sign (positive or negative).
-// (Using int as return value since a MIX word has 30 bits.)
-func toNum(mixBytes ...MIXByte) int {
-	value := 0
+// (max value is 2^31-1)
+func toNum(mixBytes MIXBytes) (value int64) {
 	for i := 1; i < len(mixBytes); i++ {
 		value <<= 6
-		value += int(mixBytes[i]) & 63
+		value += int64(mixBytes[i]) & 63
 	}
 	if mixBytes[0] == NEG_SIGN {
 		value = -value
@@ -122,12 +122,12 @@ type MIXArch struct {
 
 // WriteCell (copies/assigns) the given data to the memory cell specified by number.
 func (machine MIXArch) WriteCell(address MIXBytes, data MIXBytes) {
-	copy(machine.Mem[toNum(address...)], data)
+	copy(machine.Mem[toNum(address)], data)
 }
 
 // ReadCell returns the MIX word at the memory cell at cellNum.
 func (machine MIXArch) ReadCell(address MIXBytes) MIXBytes {
-	return machine.Mem[toNum(address...)]
+	return machine.Mem[toNum(address)]
 }
 
 // NewMachine creates a new instance of MIXArch
