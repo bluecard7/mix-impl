@@ -38,8 +38,8 @@ func (left MIXBytes) Equals(right MIXBytes) bool {
 	if len(left) != len(right) {
 		return false
 	}
-	for i, v := range left {
-		if v != right[i] {
+	for i := range left {
+		if left[i] != right[i] {
 			return false
 		}
 	}

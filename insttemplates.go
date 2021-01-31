@@ -68,13 +68,13 @@ func loads() InstTemplates {
 
 func st(machine *MIXArch, inst *Instruction, src Register) {
 	L, R := inst.F()
-	content := machine.ReadCell(inst.A())
-	if L == 0 { // if sign is included
-		content[0] = src[0]
+	cell := machine.ReadCell(inst.A()) // is ReadCell really right? it returns the cell
+	if L == 0 {                        // if sign is included
+		cell[0] = src[0]
 		L = 1
 	}
-	copy(content[L:R+1], src[len(src)-int(R-L+1):])
-	machine.WriteCell(inst.A(), content)
+	copy(cell[L:R+1], src[len(src)-int(R-L+1):])
+	//machine.WriteCell(inst.A(), content)
 }
 
 // store insts, #24-33
