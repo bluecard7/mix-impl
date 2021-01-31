@@ -21,13 +21,15 @@ func baseInstCode(L, R, c MIXByte) MIXBytes {
 	return NewWord(POS_SIGN, 0, 0, 0, f, c)
 }
 
-// A returns the address portion of inst.Code (sign, A, A).
+// A returns the address portion of inst.Code (sign, A, A)
+// indexed by the index register at inst.I().
 // If newA has len 3, then the address is set to it.
 func (inst *Instruction) A(newA ...MIXByte) []MIXByte {
 	if len(newA) == 3 {
 		copy(inst.Code, newA)
 	}
-	return inst.Code[:3]
+	index := machine.R[I1+int(inst.I())-1].Raw()
+	return toMIXBytes(toNum(inst.Code[:3])+toNum(index), 2)
 }
 
 // I returns the index portion of inst.Code (I).

@@ -124,25 +124,31 @@ func stores() InstTemplates {
 
 // add, sub, mul, div, #1-4
 func arithmetic() InstTemplates {
-	mixSum := func(n1, n2 MIXBytes) MIXBytes {
+	// Returns MIXBytes of cell specified by address and fields.
+	// Makes sure returned MIXBytes has a sign.
+	numCell := func(machine *MIXArch, inst *Instruction) MIXBytes {
+		L, R := inst.F()
+		v := machine.ReadCell(inst.A())[L : R+1]
+		if 0 < L {
+			v = append(MIXBytes{POS_SIGN}, v...)
+		}
+		return v
+	}
+
+	mixSum := func(machine *MIXArch, n1, n2 MIXBytes) MIXBytes {
 		sum := toNum(n1) + toNum(n2)
 		if sum > 2<<31-1 {
 			machine.OverflowToggle = true
 		}
 		return toMIXBytes(sum, 5)
 	}
+
 	return InstTemplates{
 		"ADD": func() *Instruction {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 1),
 				Exec: func(machine *MIXArch, inst *Instruction) {
-					L, R := inst.F()
-					v := machine.ReadCell(inst.A())[L : R+1]
-					if 0 < L {
-						v = append(MIXBytes{POS_SIGN}, v...)
-					}
-					// not sure if toMIXBytes works as intended here
-					copy(machine.R[A], mixSum(machine.R[A].Raw(), v))
+					copy(machine.R[A], mixSum(machine, machine.R[A].Raw(), numCell(machine, inst)))
 				},
 			}
 		},
@@ -150,12 +156,7 @@ func arithmetic() InstTemplates {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 2),
 				Exec: func(machine *MIXArch, inst *Instruction) {
-					L, R := inst.F()
-					v := machine.ReadCell(inst.A())[L : R+1]
-					if 0 < L {
-						v = append(MIXBytes{POS_SIGN}, v...)
-					}
-					copy(machine.R[A], mixSum(machine.R[A].Raw(), v.Negate()))
+					copy(machine.R[A], mixSum(machine, machine.R[A].Raw(), numCell(machine, inst).Negate()))
 				},
 			}
 		},
@@ -163,12 +164,8 @@ func arithmetic() InstTemplates {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 3),
 				Exec: func(machine *MIXArch, inst *Instruction) {
-					L, R := inst.F()
-					v := machine.ReadCell(inst.A())[L : R+1]
-					if 0 < L {
-						v = append(MIXBytes{POS_SIGN}, v...)
-					}
-					productBytes := toMIXBytes(toNum(machine.R[A].Raw())*toNum(v), 10)
+					product := toNum(machine.R[A].Raw()) * toNum(numCell(machine, inst))
+					productBytes := toMIXBytes(product, 10)
 					copy(machine.R[X], productBytes[:6])
 					copy(machine.R[A][1:], productBytes[6:])
 					copy(machine.R[A], productBytes[:1])
@@ -179,13 +176,8 @@ func arithmetic() InstTemplates {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 4),
 				Exec: func(machine *MIXArch, inst *Instruction) {
-					L, R := inst.F()
-					v := machine.ReadCell(inst.A())[L : R+1]
-					if 0 < L {
-						v = append(MIXBytes{POS_SIGN}, v...)
-					}
 					var quotient, remainder int64
-					den := toNum(v)
+					den := toNum(numCell(machine, inst))
 					if den != 0 {
 						numBytes := append(
 							machine.R[A][:1],
@@ -205,6 +197,58 @@ func arithmetic() InstTemplates {
 			}
 		},
 	}
+}
+
+// #48-55
+func addressTransfers() InstTemplates {
+	entries := []struct {
+		Suffix string
+		RegI   int
+	}{{"A", A}, {"1", I1}, {"2", I2}, {"3", I3}, {"4", I4}, {"5", I5}, {"6", I6}, {"X", X}}
+	templates := make(InstTemplates)
+	for i, entry := range entries {
+		// INC, F = 0
+		templates["INC"+entry.Suffix] = func(cOffset, regI int) func() *Instruction {
+			return func() *Instruction {
+				return &Instruction{
+					Code: baseInstCode(0, 0, MIXByte(48+cOffset)),
+					Exec: func(machine *MIXArch, inst *Instruction) {
+					},
+				}
+			}
+		}(i, entry.RegI)
+		// DEC, F = 1
+		templates["DEC"+entry.Suffix] = func(cOffset, regI int) func() *Instruction {
+			return func() *Instruction {
+				return &Instruction{
+					Code: baseInstCode(0, 1, MIXByte(48+cOffset)),
+					Exec: func(machine *MIXArch, inst *Instruction) {
+					},
+				}
+			}
+		}(i, entry.RegI)
+		// ENT, F = 2
+		templates["ENT"+entry.Suffix] = func(cOffset, regI int) func() *Instruction {
+			return func() *Instruction {
+				return &Instruction{
+					Code: baseInstCode(0, 2, MIXByte(48+cOffset)),
+					Exec: func(machine *MIXArch, inst *Instruction) {
+					},
+				}
+			}
+		}(i, entry.RegI)
+		//ENN, F = 3
+		templates["ENN"+entry.Suffix] = func(cOffset, regI int) func() *Instruction {
+			return func() *Instruction {
+				return &Instruction{
+					Code: baseInstCode(0, 3, MIXByte(48+cOffset)),
+					Exec: func(machine *MIXArch, inst *Instruction) {
+					},
+				}
+			}
+		}(i, entry.RegI)
+	}
+	return templates
 }
 
 func aggregateTemplates() InstTemplates {

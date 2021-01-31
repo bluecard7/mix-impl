@@ -149,39 +149,57 @@ func TestST(t *testing.T) {
 }
 
 func TestArithmetic(t *testing.T) {
-	/*	tests := []struct {
-		}{}
-		for _, test := range tests {
-			inst, err := ParseInst(test.Line)
-			if err != nil {
-				t.Fatalf("Error parsing %s: %v", test.Line, err)
-			}
-		}*/
+	tests := []struct {
+		Line         string
+		RAData, Want MIXBytes
+	}{
+		{
+			Line:   "ADD 1000",
+			RAData: MIXBytes{},
+			Want:   MIXBytes{},
+		},
+	}
+	for _, test := range tests {
+		_, err := ParseInst(test.Line)
+		if err != nil {
+			t.Fatalf("Error parsing %s: %v", test.Line, err)
+		}
+		t.Error("N/A")
+	}
 }
 
 func TestAddressTransfer(t *testing.T) {
+	t.Error("N/A")
 }
 
 func TestComparison(t *testing.T) {
+	t.Error("N/A")
 }
 
 func TestJump(t *testing.T) {
+	t.Error("N/A")
 }
 
 func TestShift(t *testing.T) {
+	t.Error("N/A")
 }
 
 func TestMove(t *testing.T) {
+	t.Error("N/A")
 }
 
 func TestNop(t *testing.T) {
+	t.Error("N/A")
 }
 
 func TestHalt(t *testing.T) {
+	t.Error("N/A")
 }
 
 func TestIO(t *testing.T) {
+	t.Error("N/A")
 }
 
 func TestConversion(t *testing.T) {
+	t.Error("N/A")
 }
