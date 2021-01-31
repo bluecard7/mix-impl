@@ -21,6 +21,24 @@ const (
 	WORD_SIZE = 6
 )
 
+func (b MIXBytes) Sign() MIXBytes {
+	return b[:1]
+}
+
+func (b MIXBytes) Data() MIXBytes {
+	return b[1:]
+}
+
+// Slice returns the MIXBytes in [L:R].
+// A sign is added if it isn't included in the slice.
+func (b MIXBytes) Slice(L, R MIXByte) (s MIXBytes) {
+	s = b[L : R+1]
+	if 0 < L {
+		s = append(MIXBytes{POS_SIGN}, s...)
+	}
+	return s
+}
+
 // Negate takes b and treats the MIXByte at index 0 as a sign.
 // It negates b[0], making positive negative, and vice versa.
 func (b MIXBytes) Negate() MIXBytes {
@@ -106,6 +124,14 @@ const (
 // Registers use the index 0 as sign and the rest for data
 type Register MIXBytes
 
+func (r Register) Sign() MIXBytes {
+	return r.Raw().Sign()
+}
+
+func (r Register) Data() MIXBytes {
+	return r.Raw().Data()
+}
+
 func (r Register) Raw() MIXBytes {
 	return MIXBytes(r)
 }
@@ -120,13 +146,8 @@ type MIXArch struct {
 	}
 }
 
-// WriteCell (copies/assigns) the given data to the memory cell specified by number.
-func (machine MIXArch) WriteCell(address MIXBytes, data MIXBytes) {
-	copy(machine.Mem[toNum(address)], data)
-}
-
-// ReadCell returns the MIX word at the memory cell at cellNum.
-func (machine MIXArch) ReadCell(address MIXBytes) MIXBytes {
+// Cell returns the MIX word at the memory cell at address.
+func (machine MIXArch) Cell(address MIXBytes) MIXBytes {
 	return machine.Mem[toNum(address)]
 }
 

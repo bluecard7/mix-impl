@@ -78,8 +78,8 @@ func TestLD(t *testing.T) {
 		if err != nil {
 			t.Errorf("Error parsing %s: %v", test.Line, err)
 		}
-		copy(machine.R[test.RegI], NewWord())                          // resets register
-		machine.WriteCell(inst.A(), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
+		copy(machine.R[test.RegI], NewWord())                           // resets register
+		copy(machine.Cell(inst.A()), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
 		inst.Exec(machine, inst)
 		result := machine.R[test.RegI].Raw()
 		if !test.Want.Equals(result) {
@@ -139,9 +139,9 @@ func TestST(t *testing.T) {
 			t.Fatalf("Error parsing %s: %v", test.Line, err)
 		}
 		copy(machine.R[test.RegI], test.RegData)
-		machine.WriteCell(inst.A(), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
+		copy(machine.Cell(inst.A()), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
 		inst.Exec(machine, inst)
-		result := machine.ReadCell(inst.A())
+		result := machine.Cell(inst.A())
 		if !test.Want.Equals(result) {
 			t.Errorf("Incorrect result for %s: want %v, got %v", test.Line, test.Want, result)
 		}

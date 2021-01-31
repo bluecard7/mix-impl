@@ -1,5 +1,9 @@
 package main
 
+import (
+	"math"
+)
+
 type InstTemplates map[string]func() *Instruction
 
 func (dst InstTemplates) merge(src InstTemplates) {
@@ -8,18 +12,14 @@ func (dst InstTemplates) merge(src InstTemplates) {
 	}
 }
 
-func ld(inst *Instruction, dst Register, content MIXBytes) {
-	L, R := inst.F()
-	dst[0] = POS_SIGN
-	if L == 0 {
-		dst[0] = content[0]
-		L = 1
-	}
-	partial, amtToCpy, actualSize := content[L:R+1], int(R-L+1), int(R-L+1)
-	if len(dst) < WORD_SIZE && len(dst)-1 < amtToCpy { // index registers
-		amtToCpy = len(dst) - 1
-	}
-	copy(dst[len(dst)-amtToCpy:], partial[actualSize-amtToCpy:])
+func ld(inst *Instruction, dst Register, data MIXBytes) {
+	s := data.Slice(inst.F()) // guaranteed sign
+	copy(dst.Raw().Sign(), s.Sign())
+	amtToCpy := int(math.Min(
+		float64(len(s.Data())),
+		float64(len(dst)-1),
+	))
+	copy(dst[len(dst)-amtToCpy:], s.Data()[len(s.Data())-amtToCpy:])
 }
 
 // load insts, #8 - 23
@@ -52,12 +52,12 @@ func loads() InstTemplates {
 				op := MIXByte(8 + opOffset)
 				return &Instruction{
 					Code: baseInstCode(0, 5, op),
-					Exec: func(machine *MIXArch, inst *Instruction) {
-						content := machine.ReadCell(inst.A())
+					Exec: func(m *MIXArch, inst *Instruction) {
+						cell := m.Cell(inst.A())
 						if 15 < op {
-							content.Negate()
+							cell.Negate()
 						}
-						ld(inst, machine.R[regI], content)
+						ld(inst, m.R[regI], cell)
 					},
 				}
 			}
@@ -66,15 +66,14 @@ func loads() InstTemplates {
 	return templates
 }
 
-func st(machine *MIXArch, inst *Instruction, src Register) {
+func st(m *MIXArch, inst *Instruction, src Register) {
 	L, R := inst.F()
-	cell := machine.ReadCell(inst.A()) // is ReadCell really right? it returns the cell
-	if L == 0 {                        // if sign is included
-		cell[0] = src[0]
-		L = 1
+	cell := m.Cell(inst.A())
+	if L == 0 {
+		copy(cell.Sign(), src.Raw().Sign())
+		L++
 	}
 	copy(cell[L:R+1], src[len(src)-int(R-L+1):])
-	//machine.WriteCell(inst.A(), content)
 }
 
 // store insts, #24-33
@@ -105,15 +104,15 @@ func stores() InstTemplates {
 				}
 				return &Instruction{
 					Code: baseInstCode(L, R, op),
-					Exec: func(machine *MIXArch, inst *Instruction) {
-						r := machine.R[regI]
+					Exec: func(m *MIXArch, inst *Instruction) {
+						r := m.R[regI]
 						if I1 <= regI || regI <= I6 { // using index register
 							r = append(Register{r[0], 0, 0, 0}, r[1:]...)
 						}
 						if op == 33 { // STZ
 							r = Register(NewWord())
 						}
-						st(machine, inst, r)
+						st(m, inst, r)
 					},
 				}
 			}
@@ -124,21 +123,10 @@ func stores() InstTemplates {
 
 // add, sub, mul, div, #1-4
 func arithmetic() InstTemplates {
-	// Returns MIXBytes of cell specified by address and fields.
-	// Makes sure returned MIXBytes has a sign.
-	numCell := func(machine *MIXArch, inst *Instruction) MIXBytes {
-		L, R := inst.F()
-		v := machine.ReadCell(inst.A())[L : R+1]
-		if 0 < L {
-			v = append(MIXBytes{POS_SIGN}, v...)
-		}
-		return v
-	}
-
-	mixSum := func(machine *MIXArch, n1, n2 MIXBytes) MIXBytes {
+	mixSum := func(m *MIXArch, n1, n2 MIXBytes) MIXBytes {
 		sum := toNum(n1) + toNum(n2)
 		if sum > 2<<31-1 {
-			machine.OverflowToggle = true
+			m.OverflowToggle = true
 		}
 		return toMIXBytes(sum, 5)
 	}
@@ -147,52 +135,53 @@ func arithmetic() InstTemplates {
 		"ADD": func() *Instruction {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 1),
-				Exec: func(machine *MIXArch, inst *Instruction) {
-					copy(machine.R[A], mixSum(machine, machine.R[A].Raw(), numCell(machine, inst)))
+				Exec: func(m *MIXArch, inst *Instruction) {
+					cell := m.Cell(inst.A()).Slice(inst.F())
+					copy(m.R[A], mixSum(m, m.R[A].Raw(), cell))
 				},
 			}
 		},
 		"SUB": func() *Instruction {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 2),
-				Exec: func(machine *MIXArch, inst *Instruction) {
-					copy(machine.R[A], mixSum(machine, machine.R[A].Raw(), numCell(machine, inst).Negate()))
+				Exec: func(m *MIXArch, inst *Instruction) {
+					cell := m.Cell(inst.A()).Slice(inst.F())
+					copy(m.R[A], mixSum(m, m.R[A].Raw(), cell.Negate()))
 				},
 			}
 		},
 		"MUL": func() *Instruction {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 3),
-				Exec: func(machine *MIXArch, inst *Instruction) {
-					product := toNum(machine.R[A].Raw()) * toNum(numCell(machine, inst))
+				Exec: func(m *MIXArch, inst *Instruction) {
+					cell := m.Cell(inst.A()).Slice(inst.F())
+					product := toNum(m.R[A].Raw()) * toNum(cell)
 					productBytes := toMIXBytes(product, 10)
-					copy(machine.R[X], productBytes[:6])
-					copy(machine.R[A][1:], productBytes[6:])
-					copy(machine.R[A], productBytes[:1])
+					copy(m.R[X], productBytes[:6])
+					copy(m.R[A].Data(), productBytes[6:])
+					copy(m.R[A], productBytes.Data())
 				},
 			}
 		},
 		"DIV": func() *Instruction {
 			return &Instruction{
 				Code: baseInstCode(0, 5, 4),
-				Exec: func(machine *MIXArch, inst *Instruction) {
+				Exec: func(m *MIXArch, inst *Instruction) {
 					var quotient, remainder int64
-					den := toNum(numCell(machine, inst))
+					cell := m.Cell(inst.A()).Slice(inst.F())
+					den := toNum(cell)
 					if den != 0 {
-						numBytes := append(
-							machine.R[A][:1],
-							append(machine.R[X][1:], machine.R[A][1:]...)...,
-						)
-						num := toNum(numBytes.Raw())
+						numBytes := append(m.R[A].Sign(), append(m.R[X].Data(), m.R[A].Data()...)...)
+						num := toNum(numBytes)
 						quotient, remainder = num/den, num%den
 					}
 					if den == 0 || quotient > 2<<31-1 {
-						machine.OverflowToggle = true
+						m.OverflowToggle = true
 						return
 					}
-					copy(machine.R[X], toMIXBytes(remainder, 5))
-					copy(machine.R[X], machine.R[A][:1])
-					copy(machine.R[A], toMIXBytes(quotient, 5))
+					copy(m.R[X], toMIXBytes(remainder, 5))
+					copy(m.R[X], m.R[A].Sign())
+					copy(m.R[A], toMIXBytes(quotient, 5))
 				},
 			}
 		},
@@ -212,7 +201,7 @@ func addressTransfers() InstTemplates {
 			return func() *Instruction {
 				return &Instruction{
 					Code: baseInstCode(0, 0, MIXByte(48+cOffset)),
-					Exec: func(machine *MIXArch, inst *Instruction) {
+					Exec: func(m *MIXArch, inst *Instruction) {
 					},
 				}
 			}
@@ -222,7 +211,7 @@ func addressTransfers() InstTemplates {
 			return func() *Instruction {
 				return &Instruction{
 					Code: baseInstCode(0, 1, MIXByte(48+cOffset)),
-					Exec: func(machine *MIXArch, inst *Instruction) {
+					Exec: func(m *MIXArch, inst *Instruction) {
 					},
 				}
 			}
@@ -232,7 +221,7 @@ func addressTransfers() InstTemplates {
 			return func() *Instruction {
 				return &Instruction{
 					Code: baseInstCode(0, 2, MIXByte(48+cOffset)),
-					Exec: func(machine *MIXArch, inst *Instruction) {
+					Exec: func(m *MIXArch, inst *Instruction) {
 					},
 				}
 			}
@@ -242,7 +231,7 @@ func addressTransfers() InstTemplates {
 			return func() *Instruction {
 				return &Instruction{
 					Code: baseInstCode(0, 3, MIXByte(48+cOffset)),
-					Exec: func(machine *MIXArch, inst *Instruction) {
+					Exec: func(m *MIXArch, inst *Instruction) {
 					},
 				}
 			}
