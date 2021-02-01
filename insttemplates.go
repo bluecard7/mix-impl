@@ -221,8 +221,158 @@ func addressTransfers() InstTemplates {
 	return templates
 }
 
+func comparisons() InstTemplates {
+	templates := make(InstTemplates)
+	for i, entry := range regEntries {
+		templates[entry.Name] = func(cOffset, regI int) func() *Instruction {
+			return func() *Instruction {
+				return &Instruction{
+					Code: baseInstCode(0, 5, MIXByte(56+cOffset)),
+					Exec: func(m *MIXArch, inst *Instruction) {
+						rS := m.R[regI].Raw().Slice(inst.F())
+						cellS := m.Cell(inst.A()).Slice(inst.F())
+						rNum, cellNum := toNum(rS), toNum(cellS)
+						m.SetComparisons(rNum < cellNum, rNum == cellNum, rNum > cellNum)
+					},
+				}
+			}
+		}(i, entry.I)
+	}
+	return templates
+}
+
+func jumps() InstTemplates {
+	templates := make(InstTemplates)
+	templates["JMP"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(0, 0, 39),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				copy(m.R[J], inst.A())
+				copy(m.PC, inst.A())
+			},
+		}
+	}
+	templates["JSJ"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(0, 1, 39),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				copy(m.PC, inst.A())
+			},
+		}
+	}
+	templates["JOV"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(0, 2, 39),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				if m.OverflowToggle {
+					m.OverflowToggle = false
+					copy(m.R[J], inst.A())
+					copy(m.PC, inst.A())
+				}
+			},
+		}
+	}
+	templates["JNOV"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(0, 3, 39),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				if !m.OverflowToggle {
+					copy(m.R[J], inst.A())
+					copy(m.PC, inst.A())
+				}
+				m.OverflowToggle = false
+			},
+		}
+	}
+	// JL, JE, JG, JGE, JNE, JLE
+	templates["JL"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(0, 4, 39),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				if lt, _, _ := m.Comparisons(); lt {
+					copy(m.R[J], inst.A())
+					copy(m.PC, inst.A())
+				}
+			},
+		}
+	}
+	templates["JE"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(0, 5, 39),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				if _, eq, _ := m.Comparisons(); eq {
+					copy(m.R[J], inst.A())
+					copy(m.PC, inst.A())
+				}
+			},
+		}
+	}
+	templates["JG"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(0, 6, 39),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				if _, _, gt := m.Comparisons(); gt {
+					copy(m.R[J], inst.A())
+					copy(m.PC, inst.A())
+				}
+			},
+		}
+	}
+	templates["JGE"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(0, 7, 39),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				if _, eq, gt := m.Comparisons(); eq || gt {
+					copy(m.R[J], inst.A())
+					copy(m.PC, inst.A())
+				}
+			},
+		}
+	}
+	templates["JNE"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(1, 0, 39),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				if lt, _, gt := m.Comparisons(); lt || gt {
+					copy(m.R[J], inst.A())
+					copy(m.PC, inst.A())
+				}
+			},
+		}
+	}
+	templates["JLE"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(1, 1, 39),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				if lt, eq, _ := m.Comparisons(); lt || eq {
+					copy(m.R[J], inst.A())
+					copy(m.PC, inst.A())
+				}
+			},
+		}
+	}
+	//for _ := range regEntries {
+	// J_N, J_Z, J_P, J_NN, J_NZ, J_NP
+	//}
+	return templates
+}
+
 func aggregateTemplates() InstTemplates {
 	templates := make(InstTemplates)
+	templates["NOP"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(0, 0, 0),
+			Exec: func(m *MIXArch, inst *Instruction) {},
+		}
+	}
+	templates["HLT"] = func() *Instruction {
+		return &Instruction{
+			Code: baseInstCode(0, 2, 5),
+			Exec: func(m *MIXArch, inst *Instruction) {
+				// stop machine, involve program counter?
+			},
+		}
+	}
 	templates.merge(loads())
 	templates.merge(stores())
 	templates.merge(arithmetic())

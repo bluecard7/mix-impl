@@ -49,6 +49,11 @@ func (b MIXBytes) Negate() (negated MIXBytes) {
 	return append(MIXBytes{opposite}, b.Data()...)
 }
 
+// Creates MIXBytes of specified size, fills with zeros if
+// b is smaller than size
+//func (b MIXBytes) Padded(size int) MIXBytes {
+//}
+
 // Equals method for slice of MIXBytes
 func (left MIXBytes) Equals(right MIXBytes) bool {
 	if len(left) != len(right) {
@@ -147,6 +152,7 @@ func (r Register) Raw() MIXBytes {
 type MIXArch struct {
 	R                   []Register
 	Mem                 []MIXBytes
+	PC                  MIXBytes // program counter
 	OverflowToggle      bool
 	ComparisonIndicator struct {
 		Less, Equal, Greater bool
@@ -154,8 +160,18 @@ type MIXArch struct {
 }
 
 // Cell returns the MIX word at the memory cell at address.
-func (machine MIXArch) Cell(address MIXBytes) MIXBytes {
+func (m *MIXArch) Cell(address MIXBytes) MIXBytes {
 	return machine.Mem[toNum(address)]
+}
+
+func (m *MIXArch) SetComparisons(lt, eq, gt bool) {
+	m.ComparisonIndicator.Less = lt
+	m.ComparisonIndicator.Equal = eq
+	m.ComparisonIndicator.Greater = gt
+}
+
+func (m *MIXArch) Comparisons() (bool, bool, bool) {
+	return m.ComparisonIndicator.Less, m.ComparisonIndicator.Equal, m.ComparisonIndicator.Greater
 }
 
 // NewMachine creates a new instance of MIXArch
