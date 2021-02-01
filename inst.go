@@ -24,7 +24,7 @@ func baseInstCode(L, R, c MIXByte) MIXBytes {
 // A returns the address portion of inst.Code (sign, A, A)
 // indexed by the index register at inst.I().
 // If newA has len 3, then the address is set to it.
-func (inst *Instruction) A(newA ...MIXByte) []MIXByte {
+func (inst *Instruction) A(newA ...MIXByte) MIXBytes {
 	if len(newA) == 3 {
 		copy(inst.Code, newA)
 	}

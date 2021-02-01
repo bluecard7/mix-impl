@@ -15,8 +15,8 @@ func NewByte(data MIXByte) MIXByte {
 }
 
 const (
-	POS_SIGN = 0
-	NEG_SIGN = 1
+	POS_SIGN MIXByte = 0
+	NEG_SIGN         = 1
 
 	WORD_SIZE = 6
 )
@@ -40,15 +40,13 @@ func (b MIXBytes) Slice(L, R MIXByte) (s MIXBytes) {
 }
 
 // Negate takes b and treats the MIXByte at index 0 as a sign.
-// It negates b[0], making positive negative, and vice versa.
-func (b MIXBytes) Negate() MIXBytes {
-	switch b[0] {
-	case POS_SIGN:
-		b[0] = NEG_SIGN
-	case NEG_SIGN:
-		b[0] = POS_SIGN
+// It returns a copy with the opposite sign.
+func (b MIXBytes) Negate() (negated MIXBytes) {
+	opposite := POS_SIGN
+	if b[0] == POS_SIGN {
+		opposite = NEG_SIGN
 	}
-	return b
+	return append(MIXBytes{opposite}, b.Data()...)
 }
 
 // Equals method for slice of MIXBytes
@@ -62,6 +60,15 @@ func (left MIXBytes) Equals(right MIXBytes) bool {
 		}
 	}
 	return true
+}
+
+func (left MIXBytes) Add(right MIXBytes) (MIXBytes, bool) {
+	var overflowed bool
+	sum := toNum(left) + toNum(right)
+	if sum > 2<<31-1 {
+		overflowed = true
+	}
+	return toMIXBytes(sum, 5), overflowed
 }
 
 // NewWord returns MIXBytes(len 6) holding the given data.
