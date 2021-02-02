@@ -36,27 +36,27 @@ func ld(inst *Instruction, dst Register, data MIXBytes) {
 func loads() InstTemplates {
 	templates := make(InstTemplates)
 	for i, entry := range regEntries {
-		templates["LD"+entry.Name] = func(cOffset, regI int) func() *Instruction {
+		templates["LD"+entry.Name] = func(c, regI int) func() *Instruction {
 			return func() *Instruction {
 				return &Instruction{
-					Code: baseInstCode(0, 5, MIXByte(8+cOffset)),
+					Code: baseInstCode(0, 5, MIXByte(c)),
 					Exec: func(m *MIXArch, inst *Instruction) {
 						ld(inst, m.R[regI], m.Cell(inst.A()))
 					},
 				}
 			}
-		}(i, entry.I)
+		}(8+i, entry.I)
 
-		templates["LD"+entry.Name+"N"] = func(cOffset, regI int) func() *Instruction {
+		templates["LD"+entry.Name+"N"] = func(c, regI int) func() *Instruction {
 			return func() *Instruction {
 				return &Instruction{
-					Code: baseInstCode(0, 5, MIXByte(16+cOffset)),
+					Code: baseInstCode(0, 5, MIXByte(c)),
 					Exec: func(m *MIXArch, inst *Instruction) {
 						ld(inst, m.R[regI], m.Cell(inst.A()).Negate())
 					},
 				}
 			}
-		}(i, entry.I)
+		}(16+i, entry.I)
 	}
 	return templates
 }
@@ -76,9 +76,9 @@ func stores() InstTemplates {
 	stEntries := append(regEntries, RegEntry{"J", J}, RegEntry{"Z", A})
 	templates := make(InstTemplates)
 	for i, entry := range stEntries {
-		templates["ST"+entry.Name] = func(opOffset, regI int) func() *Instruction {
+		templates["ST"+entry.Name] = func(c, regI int) func() *Instruction {
 			return func() *Instruction {
-				op := MIXByte(24 + opOffset)
+				op := MIXByte(c)
 				var L, R MIXByte = 0, 5
 				if op == 32 { // STJ
 					R = 2
@@ -97,7 +97,7 @@ func stores() InstTemplates {
 					},
 				}
 			}
-		}(i, entry.I)
+		}(24+i, entry.I)
 	}
 	return templates
 }
@@ -170,10 +170,10 @@ func addressTransfers() InstTemplates {
 	templates := make(InstTemplates)
 	for i, entry := range regEntries {
 		// INC, F = 0
-		templates["INC"+entry.Name] = func(cOffset, regI int) func() *Instruction {
+		templates["INC"+entry.Name] = func(c, regI int) func() *Instruction {
 			return func() *Instruction {
 				return &Instruction{
-					Code: baseInstCode(0, 0, MIXByte(48+cOffset)),
+					Code: baseInstCode(0, 0, MIXByte(c)),
 					Exec: func(m *MIXArch, inst *Instruction) {
 						sum, overflowed := m.R[regI].Raw().Add(inst.A())
 						m.OverflowToggle = overflowed
@@ -181,12 +181,12 @@ func addressTransfers() InstTemplates {
 					},
 				}
 			}
-		}(i, entry.I)
+		}(48+i, entry.I)
 		// DEC, F = 1
-		templates["DEC"+entry.Name] = func(cOffset, regI int) func() *Instruction {
+		templates["DEC"+entry.Name] = func(c, regI int) func() *Instruction {
 			return func() *Instruction {
 				return &Instruction{
-					Code: baseInstCode(0, 1, MIXByte(48+cOffset)),
+					Code: baseInstCode(0, 1, MIXByte(c)),
 					Exec: func(m *MIXArch, inst *Instruction) {
 						sum, overflowed := m.R[regI].Raw().Add(inst.A().Negate())
 						m.OverflowToggle = overflowed
@@ -194,29 +194,29 @@ func addressTransfers() InstTemplates {
 					},
 				}
 			}
-		}(i, entry.I)
+		}(48+i, entry.I)
 		// ENT, F = 2
-		templates["ENT"+entry.Name] = func(cOffset, regI int) func() *Instruction {
+		templates["ENT"+entry.Name] = func(c, regI int) func() *Instruction {
 			return func() *Instruction {
 				return &Instruction{
-					Code: baseInstCode(0, 2, MIXByte(48+cOffset)),
+					Code: baseInstCode(0, 2, MIXByte(c)),
 					Exec: func(m *MIXArch, inst *Instruction) {
 						copy(m.R[regI], inst.A())
 					},
 				}
 			}
-		}(i, entry.I)
+		}(48+i, entry.I)
 		//ENN, F = 3
-		templates["ENN"+entry.Name] = func(cOffset, regI int) func() *Instruction {
+		templates["ENN"+entry.Name] = func(c, regI int) func() *Instruction {
 			return func() *Instruction {
 				return &Instruction{
-					Code: baseInstCode(0, 3, MIXByte(48+cOffset)),
+					Code: baseInstCode(0, 3, MIXByte(c)),
 					Exec: func(m *MIXArch, inst *Instruction) {
 						copy(m.R[regI], inst.A().Negate())
 					},
 				}
 			}
-		}(i, entry.I)
+		}(48+i, entry.I)
 	}
 	return templates
 }
@@ -224,10 +224,10 @@ func addressTransfers() InstTemplates {
 func comparisons() InstTemplates {
 	templates := make(InstTemplates)
 	for i, entry := range regEntries {
-		templates[entry.Name] = func(cOffset, regI int) func() *Instruction {
+		templates[entry.Name] = func(c, regI int) func() *Instruction {
 			return func() *Instruction {
 				return &Instruction{
-					Code: baseInstCode(0, 5, MIXByte(56+cOffset)),
+					Code: baseInstCode(0, 5, MIXByte(c)),
 					Exec: func(m *MIXArch, inst *Instruction) {
 						rS := m.R[regI].Raw().Slice(inst.F())
 						cellS := m.Cell(inst.A()).Slice(inst.F())
@@ -236,7 +236,7 @@ func comparisons() InstTemplates {
 					},
 				}
 			}
-		}(i, entry.I)
+		}(56+i, entry.I)
 	}
 	return templates
 }
@@ -351,10 +351,30 @@ func jumps() InstTemplates {
 			},
 		}
 	}
-	//for _ := range regEntries {
-	// J_N, J_Z, J_P, J_NN, J_NZ, J_NP
-	//}
+	for i, entry := range regEntries {
+		for j, suffix := range []string{"N", "Z", "P", "NN", "NZ", "NP"} {
+			templates["J"+entry.Name+suffix] = func(c, f, regI int) func() *Instruction {
+				return func() *Instruction {
+					return &Instruction{
+						Code: baseInstCode(0, MIXByte(f), MIXByte(c)),
+						Exec: func(m *MIXArch, inst *Instruction) {
+							if n := toNum(m.R[regI].Raw()); (f == 0 && n < 0) || (f == 1 && n == 0) ||
+								(f == 2 && 0 < n) || (f == 3 && 0 <= n) ||
+								(f == 4 && n != 0) || (f == 5 && n <= 0) {
+								copy(m.R[J], inst.A())
+								copy(m.PC, inst.A())
+							}
+						},
+					}
+				}
+			}(40+i, j, entry.I)
+		}
+	}
 	return templates
+}
+
+func shifts() InstTemplates {
+	return InstTemplates{}
 }
 
 func aggregateTemplates() InstTemplates {
