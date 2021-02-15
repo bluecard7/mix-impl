@@ -9,23 +9,23 @@ var machine = NewMachine()
 
 func TestParseInst(t *testing.T) {
 	tests := []struct {
-		Line string
-		Err  error
-		Code MIXBytes
+		Line   string
+		Err    error
+		Fields MIXBytes
 	}{
-		{Line: "LDA 2000", Code: MIXBytes{POS_SIGN, 31, 16, 0, 5, 8}},        // basic
-		{Line: "LDXN 2000", Code: MIXBytes{POS_SIGN, 31, 16, 0, 5, 23}},      // different op len
-		{Line: "LDA 27", Code: MIXBytes{POS_SIGN, 0, 27, 0, 5, 8}},           // different address len
-		{Line: "LDA -345", Code: MIXBytes{NEG_SIGN, 5, 25, 0, 5, 8}},         // negative address
-		{Line: "LDA 2000,5", Code: MIXBytes{POS_SIGN, 31, 16, 5, 5, 8}},      // use index
-		{Line: "LDA 2000(1:4)", Code: MIXBytes{POS_SIGN, 31, 16, 0, 12, 8}},  // use field spec
-		{Line: "LDA 2000,3(0:0)", Code: MIXBytes{POS_SIGN, 31, 16, 3, 0, 8}}, // use both
-		{Line: "LDA9 2AA,9I(.3:-4)", Err: ErrRegex},                          // regex failure
-		{Line: "HELLO 30416", Err: ErrOp},                                    // undefined op
-		{Line: "LDA 2000,7", Err: ErrIndex},                                  // out of bound index
-		{Line: "LDA 2000(7:5)", Err: ErrField},                               // out of bound L
-		{Line: "LDA 2000(2:7)", Err: ErrField},                               // out of bound R
-		{Line: "LDA 2000(3:2)", Err: ErrField},                               // L > R
+		{Line: "LDA 2000", Fields: MIXBytes{POS_SIGN, 31, 16, 0, 5, 8}},        // basic
+		{Line: "LDXN 2000", Fields: MIXBytes{POS_SIGN, 31, 16, 0, 5, 23}},      // different op len
+		{Line: "LDA 27", Fields: MIXBytes{POS_SIGN, 0, 27, 0, 5, 8}},           // different address len
+		{Line: "LDA -345", Fields: MIXBytes{NEG_SIGN, 5, 25, 0, 5, 8}},         // negative address
+		{Line: "LDA 2000,5", Fields: MIXBytes{POS_SIGN, 31, 16, 5, 5, 8}},      // use index
+		{Line: "LDA 2000(1:4)", Fields: MIXBytes{POS_SIGN, 31, 16, 0, 12, 8}},  // use field spec
+		{Line: "LDA 2000,3(0:0)", Fields: MIXBytes{POS_SIGN, 31, 16, 3, 0, 8}}, // use both
+		{Line: "LDA9 2AA,9I(.3:-4)", Err: ErrRegex},                            // regex failure
+		{Line: "HELLO 30416", Err: ErrOp},                                      // undefined op
+		{Line: "LDA 2000,7", Err: ErrIndex},                                    // out of bound index
+		{Line: "LDA 2000(7:5)", Err: ErrField},                                 // out of bound L
+		{Line: "LDA 2000(2:7)", Err: ErrField},                                 // out of bound R
+		{Line: "LDA 2000(3:2)", Err: ErrField},                                 // L > R
 	}
 
 	for _, test := range tests {
@@ -33,8 +33,8 @@ func TestParseInst(t *testing.T) {
 		if test.Err != nil && !errors.Is(test.Err, err) {
 			t.Errorf("Errors don't match for \"%s\": want \"%v\", got \"%v\"", test.Line, test.Err, err)
 		}
-		if test.Code != nil && !test.Code.Equals(inst.Code) {
-			t.Errorf("Codes don't match for \"%s\": want \"%v\", got \"%v\"", test.Line, test.Code, inst.Code)
+		if test.Fields != nil && !test.Fields.Equals(inst.Fields()) {
+			t.Errorf("Fields don't match for \"%s\": want \"%v\", got \"%v\"", test.Line, test.Fields, inst.Fields())
 		}
 	}
 }
@@ -78,9 +78,9 @@ func TestLD(t *testing.T) {
 		if err != nil {
 			t.Errorf("Error parsing %s: %v", test.Line, err)
 		}
-		copy(machine.R[test.RegI], NewWord())                           // resets register
-		copy(machine.Cell(inst.A()), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
-		inst.Exec(machine, inst)
+		copy(machine.R[test.RegI], NewWord())                       // resets register
+		copy(machine.Cell(inst), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
+		machine.Exec(inst)
 		result := machine.R[test.RegI].Raw()
 		if !test.Want.Equals(result) {
 			t.Errorf("Incorrect result for %s: want %v, got %v", test.Line, test.Want, result)
@@ -139,15 +139,16 @@ func TestST(t *testing.T) {
 			t.Fatalf("Error parsing %s: %v", test.Line, err)
 		}
 		copy(machine.R[test.RegI], test.RegData)
-		copy(machine.Cell(inst.A()), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
-		inst.Exec(machine, inst)
-		result := machine.Cell(inst.A())
+		copy(machine.Cell(inst), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
+		machine.Exec(inst)
+		result := machine.Cell(inst)
 		if !test.Want.Equals(result) {
 			t.Errorf("Incorrect result for %s: want %v, got %v", test.Line, test.Want, result)
 		}
 	}
 }
 
+/*
 func TestArithmetic(t *testing.T) {
 	tests := []struct {
 		Line         string
@@ -167,7 +168,7 @@ func TestArithmetic(t *testing.T) {
 		t.Error("N/A")
 	}
 }
-
+*/
 func TestAddressTransfer(t *testing.T) {
 	t.Error("N/A")
 }

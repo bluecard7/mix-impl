@@ -159,9 +159,15 @@ type MIXArch struct {
 	}
 }
 
-// Cell returns the MIX word at the memory cell at address.
-func (m *MIXArch) Cell(address MIXBytes) MIXBytes {
-	return machine.Mem[toNum(address)]
+// Cell returns the MIX word at the memory cell at address, indexed by I register.
+func (m *MIXArch) Cell(inst Instruction) MIXBytes {
+	address, index := Address(inst), Index(inst)
+	effectiveAddress := toNum(address) + toNum(m.R[I1+int(index)-1].Raw())
+	return machine.Mem[effectiveAddress]
+}
+
+func (m *MIXArch) Exec(inst Instruction) {
+	inst.Do(m)
 }
 
 func (m *MIXArch) SetComparisons(lt, eq, gt bool) {

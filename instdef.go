@@ -1,7 +1,7 @@
 package main
 
 type Instruction interface {
-	Do(m *MIXarch)
+	Do(m *MIXArch)
 	Fields() MIXBytes
 	Duration() int
 }
@@ -10,14 +10,14 @@ type Add struct {
 	fields MIXBytes
 }
 
-func newAdd(c MIXByte) {
+func newAdd(c MIXByte) *Add {
 	return &Add{
 		fields: defaultFields(0, 5, c),
 	}
 }
 func (inst *Add) Do(m *MIXArch) {
-	data := m.Cell(A(inst)).Slice(F(inst))
-	if C(inst) == 2 {
+	data := m.Cell(inst).Slice(FieldSpec(inst))
+	if Code(inst) == 2 {
 		data = data.Negate()
 	}
 	sum, overflowed := m.R[A].Raw().Add(data)
@@ -39,12 +39,12 @@ func newLD(c MIXByte, rI int) *Load {
 	}
 }
 func (inst *Load) Do(m *MIXArch) {
-	data := m.Cell(A(inst))
-	if 15 < C(inst) {
+	data := m.Cell(inst)
+	if 15 < Code(inst) {
 		data = data.Negate()
 	}
-	s := data.Slice(F(inst))
-	dst := m.R[inst.regI]
+	s := data.Slice(FieldSpec(inst))
+	dst := m.R[inst.rI]
 	copy(dst.Raw().Sign(), s.Sign())
 	amtToCpy := len(s.Data())
 	if len(dst)-1 < amtToCpy {
@@ -60,26 +60,26 @@ type Store struct {
 	rI     int
 }
 
-func (inst *Store) newST(c MIXByte, rI int) *Store {
+func newST(c MIXByte, rI int) *Store {
 	st := &Store{
 		fields: defaultFields(0, 5, c),
 		rI:     rI,
 	}
 	if c == 32 {
-		setF(st, 0, 2)
+		setFieldSpec(st, 0, 2)
 	}
 	return st
 }
 func (inst *Store) Do(m *MIXArch) {
 	src := m.R[inst.rI]
 	switch true {
-	case I1 <= inst.rI || inst.rI <= I6:
+	case I1 <= inst.rI && inst.rI <= I6:
 		src = append(Register{src[0], 0, 0, 0}, src[1:]...)
-	case C(inst) == 33:
+	case Code(inst) == 33:
 		src = Register(NewWord())
 	}
-	L, R := F(inst)
-	cell := m.Cell(A(inst)) // how to add index?
+	L, R := FieldSpec(inst)
+	cell := m.Cell(inst)
 	if L == 0 {
 		copy(cell.Sign(), src.Raw().Sign())
 		L = 1

@@ -17,46 +17,47 @@ func defaultFields(L, R, c MIXByte) MIXBytes {
 
 // A returns the address of inst (sign, A, A)
 // indexed by the index register at inst.I().
-func A(inst Instruction) MIXBytes {
+func Address(inst Instruction) MIXBytes {
 	// index := machine.R[I1+int(I(inst))-1].Raw() // probably do this when reading a cell in machine
 	return inst.Fields()[:3]
 }
 
-func setA(inst Instruction, newA MIXBytes) {
+func setAddress(inst Instruction, newA MIXBytes) {
 	if len(newA) == 3 {
 		copy(inst.Fields(), newA)
 	}
 }
 
 // I returns the index register of inst (I).
-func I(inst Instruction) MIXByte {
+func Index(inst Instruction) MIXByte {
 	return inst.Fields()[3]
 }
 
-func setI(inst Instruction, newI MIXByte) {
-	copy(inst.Fields()[3:4], newI)
+func setIndex(inst Instruction, newI MIXByte) {
+	inst.Fields()[3] = newI
 }
 
 // F returns the field specification of inst (F).
 // It is expressed as (L:R), rather than one number.
-func F(inst Instruction, newF ...MIXByte) (L, R MIXByte) {
+func FieldSpec(inst Instruction, newF ...MIXByte) (L, R MIXByte) {
 	f := inst.Fields()[4]
 	return f / 8, f % 8
 }
 
-func setF(inst Instruction, L, R MIXByte) {
-	copy(inst.Fields()[4:5], 8*L+R)
+func setFieldSpec(inst Instruction, L, R MIXByte) {
+	inst.Fields()[4] = 8*L + R
 }
 
-// C returns the op portion of inst.Code (C).
-func C(inst Instruction) MIXByte {
+// C returns the opcode of inst (C).
+func Code(inst Instruction) MIXByte {
 	return inst.Fields()[5]
 }
 
 func repr(inst Instruction) string {
+	L, R := FieldSpec(inst)
 	return fmt.Sprintf(
-		"Address: %v\nIndex: %v\nFieldSpec: %v\nOpCode: %v",
-		A(inst), I(inst), F(inst), C(inst),
+		"Address: %v\nIndex: %v\nFieldSpec: [%d:%d]\nOpCode: %v",
+		Address(inst), Index(inst), L, R, Code(inst),
 	)
 }
 
@@ -94,13 +95,13 @@ func ParseInst(notation string) (Instruction, error) {
 	if err != nil {
 		return nil, ErrAddress
 	}
-	setA(inst, toMIXBytes(v, 2)...)
+	setAddress(inst, toMIXBytes(v, 2))
 	if index != "" {
 		v, err = strconv.ParseInt(index, 10, 8)
 		if err != nil || v < 0 || 6 < v {
 			return nil, ErrIndex
 		}
-		setI(inst, MIXByte(v))
+		setIndex(inst, MIXByte(v))
 	}
 	if L != "" {
 		v, err = strconv.ParseInt(L, 10, 8)
@@ -112,7 +113,7 @@ func ParseInst(notation string) (Instruction, error) {
 		if err != nil || v < 0 || 5 < v || LVal > v {
 			return nil, ErrField
 		}
-		setF(inst, MIXByte(LVal), MIXByte(v))
+		setFieldSpec(inst, MIXByte(LVal), MIXByte(v))
 	}
 	return inst, nil
 }
