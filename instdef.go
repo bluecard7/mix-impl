@@ -27,6 +27,46 @@ func (inst *Add) Do(m *MIXArch) {
 func (inst *Add) Fields() MIXBytes { return inst.fields }
 func (inst *Add) Duration() int    { return 2 }
 
+type Shift struct {
+	fields MIXBytes
+}
+
+func newShift(R MIXByte) *Shift {
+	return &Shift{defaultFields(0, R, 6)}
+}
+func (inst *Shift) Do(m *MIXArch) {
+	rData := make(MIXBytes, 5)
+	copy(rData, m.R[A].Data())
+	_, R := FieldSpec(inst)
+	if 1 < R { // shifts rA + rX (data only, not signs)
+		rData = append(rData, m.R[X].Raw().Data()...)
+	}
+	var (
+		shiftAmt = toNum(Address(inst)) % len(rData)
+		removed  = make(MIXBytes, shiftAmt)
+		vacant   MIXBytes
+	)
+	if R%2 == 0 { // left shift
+		vacant = rData[len(rData)-shiftAmt:]
+		copy(removed, rData[:shiftAmt])
+		copy(rData, rData[shiftAmt:])
+	} else { // right shift
+		vacant = rData[:shiftAmt]
+		copy(removed, rData[len(rData)-shiftAmt:])
+		copy(rData[shiftAmt:], rData[:len(rData)-shiftAmt])
+	}
+
+	if 3 < R { // circular
+		copy(vacant, removed)
+	} else {
+		copy(vacant, make(MIXBytes, len(vacant)))
+	}
+	copy(m.R[A].Data(), rData)
+	copy(m.R[X].Data(), rData[5:]) // think nop if rX wasn't included in shift
+}
+func (inst *Shift) Fields() MIXBytes { return inst.fields }
+func (inst *Shift) Duration() int    { return 2 }
+
 type Load struct {
 	fields MIXBytes
 	rI     int
@@ -117,6 +157,101 @@ func (inst *AddressTransfer) Do(m *MIXArch) {
 func (inst *AddressTransfer) Fields() MIXBytes { return inst.fields }
 func (inst *AddressTransfer) Duration() int    { return 2 }
 
+type Compare struct {
+	fields MIXBytes
+	rI     int
+}
+
+func newCmp(c MIXByte, rI int) *Compare {
+	return &Compare{
+		fields: defaultFields(0, 5, c),
+		rI:     rI,
+	}
+}
+func (inst *Compare) Do(m *MIXArch) {
+	L, R := FieldSpec(inst)
+	rSlice := m.R[inst.rI].Raw().Slice(L, R)
+	cellSlice := m.Cell(inst).Slice(L, R)
+	rNum, cellNum := toNum(rSlice), toNum(cellSlice)
+	m.SetComparisons(rNum < cellNum, rNum == cellNum, rNum > cellNum)
+}
+func (inst *Compare) Fields() MIXBytes { return inst.fields }
+func (inst *Compare) Duration() int    { return 2 }
+
+type Jump struct {
+	fields MIXBytes
+	rI     int
+}
+
+func newJmp(R, c MIXByte, rI int) *Jump {
+	return &Jump{
+		fields: defaultFields(0, R, c),
+		rI:     rI,
+	}
+}
+func (inst *Jump) Do(m *MIXArch) {
+	_, R := FieldSpec(inst)
+	c, address := Code(inst), Address(inst)
+
+	// comparison flags and values are gathered
+	// here to avoid repeating later.
+	lt, eq, gt := m.Comparisons()
+	var v int64
+	if 39 < c {
+		v = toNum(m.R[inst.rI].Raw())
+	}
+
+	// Jumping seems to consist of writing to
+	// rJ and PC.
+	setJmp := func() {
+		copy(m.R[J], address)
+		copy(m.PC, address)
+	}
+
+	switch true {
+	case c == 39 && R == 0: // JMP
+		setJmp()
+	case c == 39 && R == 1: // JSJ
+		copy(m.PC, address)
+	case c == 39 && R == 2: // JOV
+		if m.OverflowToggle {
+			setJmp()
+		}
+		m.OverflowToggle = false
+	case c == 39 && R == 3: // JNOV
+		if !m.OverflowToggle {
+			setJmp()
+		}
+		m.OverflowToggle = false
+	case c == 39 && R == 4 && lt: // JL
+		setJmp()
+	case c == 39 && R == 5 && eq: // JE
+		setJmp()
+	case c == 39 && R == 6 && gt: // JG
+		setJmp()
+	case c == 39 && R == 7 && eq && gt: // JGE
+		setJmp()
+	case c == 39 && R == 8 && lt && gt: // JNE
+		setJmp()
+	case c == 39 && R == 9 && lt && eq: // JLE
+		setJmp()
+	case 39 < c && R == 0 && v < 0: // J_N
+		setJmp()
+	case 39 < c && R == 1 && v == 0: // J_Z
+		setJmp()
+	case 39 < c && R == 2 && 0 < v: // J_P
+		setJmp()
+	case 39 < c && R == 3 && -1 < v: // J_NN
+		setJmp()
+	case 39 < c && R == 4 && v != 0: // J_NZ
+		setJmp()
+	case 39 < c && R == 5 && v < 1: // J_NP
+		setJmp()
+	}
+}
+func (inst *Jump) Fields() MIXBytes { return inst.fields }
+func (inst *Jump) Duration() int    { return 2 }
+
 var templates = map[string]func() Instruction{
 	"ADD": func() Instruction { return newAdd(1) },
 	"SUB": func() Instruction { return newAdd(2) },
@@ -150,6 +285,73 @@ var templates = map[string]func() Instruction{
 	"STX": func() Instruction { return newST(31, X) },
 	"STJ": func() Instruction { return newST(32, J) },
 	"STZ": func() Instruction { return newST(33, A) },
+
+	"JMP":  func() Instruction { return newJmp(0, 39, NoR) },
+	"JSJ":  func() Instruction { return newJmp(1, 39, NoR) },
+	"JOV":  func() Instruction { return newJmp(2, 39, NoR) },
+	"JNOV": func() Instruction { return newJmp(3, 39, NoR) },
+	"JL":   func() Instruction { return newJmp(4, 39, NoR) },
+	"JE":   func() Instruction { return newJmp(5, 39, NoR) },
+	"JG":   func() Instruction { return newJmp(6, 39, NoR) },
+	"JGE":  func() Instruction { return newJmp(7, 39, NoR) },
+	"JNE":  func() Instruction { return newJmp(8, 39, NoR) },
+	"JLE":  func() Instruction { return newJmp(9, 39, NoR) },
+
+	"JAN":  func() Instruction { return newJmp(0, 40, A) },
+	"JAZ":  func() Instruction { return newJmp(1, 40, A) },
+	"JAP":  func() Instruction { return newJmp(2, 40, A) },
+	"JANN": func() Instruction { return newJmp(3, 40, A) },
+	"JANZ": func() Instruction { return newJmp(4, 40, A) },
+	"JANP": func() Instruction { return newJmp(5, 40, A) },
+
+	"J1N":  func() Instruction { return newJmp(0, 41, I1) },
+	"J1Z":  func() Instruction { return newJmp(1, 41, I1) },
+	"J1P":  func() Instruction { return newJmp(2, 41, I1) },
+	"J1NN": func() Instruction { return newJmp(3, 41, I1) },
+	"J1NZ": func() Instruction { return newJmp(4, 41, I1) },
+	"J1NP": func() Instruction { return newJmp(5, 41, I1) },
+
+	"J2N":  func() Instruction { return newJmp(0, 42, I2) },
+	"J2Z":  func() Instruction { return newJmp(1, 42, I2) },
+	"J2P":  func() Instruction { return newJmp(2, 42, I2) },
+	"J2NN": func() Instruction { return newJmp(3, 42, I2) },
+	"J2NZ": func() Instruction { return newJmp(4, 42, I2) },
+	"J2NP": func() Instruction { return newJmp(5, 42, I2) },
+
+	"J3N":  func() Instruction { return newJmp(0, 43, I3) },
+	"J3Z":  func() Instruction { return newJmp(1, 43, I3) },
+	"J3P":  func() Instruction { return newJmp(2, 43, I3) },
+	"J3NN": func() Instruction { return newJmp(3, 43, I3) },
+	"J3NZ": func() Instruction { return newJmp(4, 43, I3) },
+	"J3NP": func() Instruction { return newJmp(5, 43, I3) },
+
+	"J4N":  func() Instruction { return newJmp(0, 44, I4) },
+	"J4Z":  func() Instruction { return newJmp(1, 44, I4) },
+	"J4P":  func() Instruction { return newJmp(2, 44, I4) },
+	"J4NN": func() Instruction { return newJmp(3, 44, I4) },
+	"J4NZ": func() Instruction { return newJmp(4, 44, I4) },
+	"J4NP": func() Instruction { return newJmp(5, 44, I4) },
+
+	"J5N":  func() Instruction { return newJmp(0, 45, I5) },
+	"J5Z":  func() Instruction { return newJmp(1, 45, I5) },
+	"J5P":  func() Instruction { return newJmp(2, 45, I5) },
+	"J5NN": func() Instruction { return newJmp(3, 45, I5) },
+	"J5NZ": func() Instruction { return newJmp(4, 45, I5) },
+	"J5NP": func() Instruction { return newJmp(5, 45, I5) },
+
+	"J6N":  func() Instruction { return newJmp(0, 46, I6) },
+	"J6Z":  func() Instruction { return newJmp(1, 46, I6) },
+	"J6P":  func() Instruction { return newJmp(2, 46, I6) },
+	"J6NN": func() Instruction { return newJmp(3, 46, I6) },
+	"J6NZ": func() Instruction { return newJmp(4, 46, I6) },
+	"J6NP": func() Instruction { return newJmp(5, 46, I6) },
+
+	"JXN":  func() Instruction { return newJmp(0, 47, X) },
+	"JXZ":  func() Instruction { return newJmp(1, 47, X) },
+	"JXP":  func() Instruction { return newJmp(2, 47, X) },
+	"JXNN": func() Instruction { return newJmp(3, 47, X) },
+	"JXNZ": func() Instruction { return newJmp(4, 47, X) },
+	"JXNP": func() Instruction { return newJmp(5, 47, X) },
 
 	"INCA": func() Instruction { return newAddressTransfer(0, 48, A) },
 	"INC1": func() Instruction { return newAddressTransfer(0, 49, I1) },

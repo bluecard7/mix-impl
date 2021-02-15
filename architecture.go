@@ -130,7 +130,8 @@ const (
 	I4
 	I5
 	I6
-	J // jump, sign always +
+	J   // jump, sign always +
+	NoR // No register
 )
 
 // Registers use the index 0 as sign and the rest for data
