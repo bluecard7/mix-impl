@@ -89,6 +89,34 @@ func (inst *Store) Do(m *MIXArch) {
 func (inst *Store) Fields() MIXBytes { return inst.fields }
 func (inst *Store) Duration() int    { return 2 }
 
+type AddressTransfer struct {
+	fields MIXBytes
+	rI     int
+}
+
+func newAddressTransfer(R, c MIXByte, rI int) *AddressTransfer {
+	return &AddressTransfer{
+		fields: defaultFields(0, R, c),
+		rI:     rI,
+	}
+}
+func (inst *AddressTransfer) Do(m *MIXArch) {
+	_, R := FieldSpec(inst)
+	address := Address(inst)
+	if R%2 == 1 { // DEC, ENN
+		address = address.Negate()
+	}
+	if dst := m.R[inst.rI]; R < 2 { // INC, DEC
+		sum, overflowed := dst.Raw().Add(address)
+		m.OverflowToggle = overflowed
+		copy(dst, sum)
+	} else { // ENT, ENN
+		copy(dst, address)
+	}
+}
+func (inst *AddressTransfer) Fields() MIXBytes { return inst.fields }
+func (inst *AddressTransfer) Duration() int    { return 2 }
+
 var templates = map[string]func() Instruction{
 	"ADD": func() Instruction { return newAdd(1) },
 	"SUB": func() Instruction { return newAdd(2) },
@@ -122,4 +150,40 @@ var templates = map[string]func() Instruction{
 	"STX": func() Instruction { return newST(31, X) },
 	"STJ": func() Instruction { return newST(32, J) },
 	"STZ": func() Instruction { return newST(33, A) },
+
+	"INCA": func() Instruction { return newAddressTransfer(0, 48, A) },
+	"INC1": func() Instruction { return newAddressTransfer(0, 49, I1) },
+	"INC2": func() Instruction { return newAddressTransfer(0, 50, I2) },
+	"INC3": func() Instruction { return newAddressTransfer(0, 51, I3) },
+	"INC4": func() Instruction { return newAddressTransfer(0, 52, I4) },
+	"INC5": func() Instruction { return newAddressTransfer(0, 53, I5) },
+	"INC6": func() Instruction { return newAddressTransfer(0, 54, I6) },
+	"INCX": func() Instruction { return newAddressTransfer(0, 55, X) },
+
+	"DECA": func() Instruction { return newAddressTransfer(1, 48, A) },
+	"DEC1": func() Instruction { return newAddressTransfer(1, 49, I1) },
+	"DEC2": func() Instruction { return newAddressTransfer(1, 50, I2) },
+	"DEC3": func() Instruction { return newAddressTransfer(1, 51, I3) },
+	"DEC4": func() Instruction { return newAddressTransfer(1, 52, I4) },
+	"DEC5": func() Instruction { return newAddressTransfer(1, 53, I5) },
+	"DEC6": func() Instruction { return newAddressTransfer(1, 54, I6) },
+	"DECX": func() Instruction { return newAddressTransfer(1, 55, X) },
+
+	"ENTA": func() Instruction { return newAddressTransfer(2, 48, A) },
+	"ENT1": func() Instruction { return newAddressTransfer(2, 49, I1) },
+	"ENT2": func() Instruction { return newAddressTransfer(2, 50, I2) },
+	"ENT3": func() Instruction { return newAddressTransfer(2, 51, I3) },
+	"ENT4": func() Instruction { return newAddressTransfer(2, 52, I4) },
+	"ENT5": func() Instruction { return newAddressTransfer(2, 53, I5) },
+	"ENT6": func() Instruction { return newAddressTransfer(2, 54, I6) },
+	"ENTX": func() Instruction { return newAddressTransfer(2, 55, X) },
+
+	"ENNA": func() Instruction { return newAddressTransfer(2, 48, A) },
+	"ENN1": func() Instruction { return newAddressTransfer(2, 49, I1) },
+	"ENN2": func() Instruction { return newAddressTransfer(2, 50, I2) },
+	"ENN3": func() Instruction { return newAddressTransfer(2, 51, I3) },
+	"ENN4": func() Instruction { return newAddressTransfer(2, 52, I4) },
+	"ENN5": func() Instruction { return newAddressTransfer(2, 53, I5) },
+	"ENN6": func() Instruction { return newAddressTransfer(2, 54, I6) },
+	"ENNX": func() Instruction { return newAddressTransfer(2, 55, X) },
 }
