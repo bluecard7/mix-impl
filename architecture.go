@@ -162,9 +162,11 @@ type MIXArch struct {
 
 // Cell returns the MIX word at the memory cell at address, indexed by I register.
 func (m *MIXArch) Cell(inst Instruction) MIXBytes {
-	address, index := Address(inst), Index(inst)
-	effectiveAddress := toNum(address) + toNum(m.R[I1+int(index)-1].Raw())
-	return machine.Mem[effectiveAddress]
+	address, index := toNum(Address(inst)), Index(inst)
+	if 0 < index {
+		address += toNum(m.R[I1+int(index)-1].Raw())
+	}
+	return machine.Mem[address]
 }
 
 func (m *MIXArch) Exec(inst Instruction) {
