@@ -123,13 +123,13 @@ func toMIXBytes(value int64, size int) MIXBytes {
 
 const (
 	A  = iota // accumulator
-	X         // extension
 	I1        // index
 	I2
 	I3
 	I4
 	I5
 	I6
+	X   // extension
 	J   // jump, sign always +
 	NoR // No register
 )

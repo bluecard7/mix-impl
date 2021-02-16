@@ -70,10 +70,10 @@ func (inst *Shift) Duration() int    { return 2 }
 
 type Load struct {
 	fields MIXBytes
-	rI     int
+	rI     MIXByte
 }
 
-func newLD(c MIXByte, rI int) *Load {
+func newLD(c, rI MIXByte) *Load {
 	return &Load{
 		fields: defaultFields(0, 5, c),
 		rI:     rI,
@@ -98,10 +98,10 @@ func (inst *Load) Duration() int    { return 2 }
 
 type Store struct {
 	fields MIXBytes
-	rI     int
+	rI     MIXByte
 }
 
-func newST(c MIXByte, rI int) *Store {
+func newST(c, rI MIXByte) *Store {
 	st := &Store{
 		fields: defaultFields(0, 5, c),
 		rI:     rI,
@@ -132,10 +132,10 @@ func (inst *Store) Duration() int    { return 2 }
 
 type AddressTransfer struct {
 	fields MIXBytes
-	rI     int
+	rI     MIXByte
 }
 
-func newAddressTransfer(R, c MIXByte, rI int) *AddressTransfer {
+func newAddressTransfer(R, c, rI MIXByte) *AddressTransfer {
 	return &AddressTransfer{
 		fields: defaultFields(0, R, c),
 		rI:     rI,
@@ -160,10 +160,10 @@ func (inst *AddressTransfer) Duration() int    { return 2 }
 
 type Compare struct {
 	fields MIXBytes
-	rI     int
+	rI     MIXByte
 }
 
-func newCmp(c MIXByte, rI int) *Compare {
+func newCmp(c, rI MIXByte) *Compare {
 	return &Compare{
 		fields: defaultFields(0, 5, c),
 		rI:     rI,
@@ -181,10 +181,10 @@ func (inst *Compare) Duration() int    { return 2 }
 
 type Jump struct {
 	fields MIXBytes
-	rI     int
+	rI     MIXByte
 }
 
-func newJmp(R, c MIXByte, rI int) *Jump {
+func newJmp(R, c, rI MIXByte) *Jump {
 	return &Jump{
 		fields: defaultFields(0, R, c),
 		rI:     rI,

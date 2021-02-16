@@ -82,11 +82,10 @@ func ParseInst(notation string) (Instruction, error) {
 	matches := re.FindStringSubmatch(notation)
 	op, address, index, L, R := matches[1], matches[2], matches[3], matches[4], matches[5]
 
-	template, ok := templates[op]
-	if !ok {
+	inst := newInst(op)
+	if inst == nil {
 		return nil, ErrOp
 	}
-	inst := template()
 	var (
 		v   int64
 		err error
