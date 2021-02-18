@@ -40,10 +40,11 @@ var patternToTemplate = map[string]func(rI MIXByte) Instruction{
 	`^J([A1-6X])NN$`: func(rI MIXByte) Instruction { return newJmp(3, 40+rI, rI) },             // J_NN
 	`^J([A1-6X])NZ$`: func(rI MIXByte) Instruction { return newJmp(4, 40+rI, rI) },             // J_NZ
 	`^J([A1-6X])NP$`: func(rI MIXByte) Instruction { return newJmp(5, 40+rI, rI) },             // J_NP
-	`^$INC([A1-6X])`: func(rI MIXByte) Instruction { return newAddressTransfer(0, 48+rI, rI) }, // INC_
-	`^$DEC([A1-6X])`: func(rI MIXByte) Instruction { return newAddressTransfer(1, 48+rI, rI) }, // DEC_
-	`^$ENT([A1-6X])`: func(rI MIXByte) Instruction { return newAddressTransfer(2, 48+rI, rI) }, // ENT_
-	`^$ENN([A1-6X])`: func(rI MIXByte) Instruction { return newAddressTransfer(3, 48+rI, rI) }, // ENN_
+	`^INC([A1-6X])$`: func(rI MIXByte) Instruction { return newAddressTransfer(0, 48+rI, rI) }, // INC_
+	`^DEC([A1-6X])$`: func(rI MIXByte) Instruction { return newAddressTransfer(1, 48+rI, rI) }, // DEC_
+	`^ENT([A1-6X])$`: func(rI MIXByte) Instruction { return newAddressTransfer(2, 48+rI, rI) }, // ENT_
+	`^ENN([A1-6X])$`: func(rI MIXByte) Instruction { return newAddressTransfer(3, 48+rI, rI) }, // ENN_
+	`^CMP([A1-6X])$`: func(rI MIXByte) Instruction { return newCmp(56+rI, rI) },                //CMP_
 }
 
 var nameToTemplate = map[string]func() Instruction{

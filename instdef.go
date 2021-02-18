@@ -30,6 +30,16 @@ func (inst *Add) Do(m *MIXArch) {
 func (inst *Add) Fields() MIXBytes { return inst.fields }
 func (inst *Add) Duration() int    { return 2 }
 
+type Convert struct {
+	fields MIXBytes
+}
+
+func newConv(R MIXByte) *Convert {
+	return &Convert{defaultFields(0, R, 5)}
+}
+
+// TODO:: conversions NUM and CHAR
+
 type Shift struct {
 	fields MIXBytes
 }
@@ -81,12 +91,12 @@ func newMove(F MIXByte) *Move {
 }
 
 func (inst *Move) Do(m *MIXArch) {
-	L, R = FieldSpec(inst)
-	mvAmt, srcI, dstI := 8*L+R, toNum(Address(inst)), toNum(m.R[I1])
+	L, R := FieldSpec(inst)
+	mvAmt, srcI, dstI := int64(8*L+R), toNum(Address(inst)), toNum(m.R[I1].Raw())
 	if srcI == dstI { // then nop, copies cell to itself
 		return
 	}
-	for i := 0; i < mvAmt; i++ {
+	for i := int64(0); i < mvAmt; i++ {
 		copy(m.Mem[dstI+i], m.Mem[srcI+i])
 	}
 	copy(m.R[I1], toMIXBytes(dstI+mvAmt, 2))
@@ -156,54 +166,37 @@ func (inst *Store) Do(m *MIXArch) {
 func (inst *Store) Fields() MIXBytes { return inst.fields }
 func (inst *Store) Duration() int    { return 2 }
 
-type AddressTransfer struct {
+type IO struct {
 	fields MIXBytes
-	rI     MIXByte
 }
 
-func newAddressTransfer(R, c, rI MIXByte) *AddressTransfer {
-	return &AddressTransfer{
-		fields: defaultFields(0, R, c),
-		rI:     rI,
-	}
+func newIO(R, c MIXByte) *IO {
+	return &IO{defaultFields(0, R, c)}
 }
-func (inst *AddressTransfer) Do(m *MIXArch) {
-	_, R := FieldSpec(inst)
-	address := Address(inst)
-	if R%2 == 1 { // DEC, ENN
-		address = address.Negate()
-	}
-	if dst := m.R[inst.rI]; R < 2 { // INC, DEC
-		sum, overflowed := dst.Raw().Add(address)
-		m.OverflowToggle = overflowed
-		copy(dst, sum)
-	} else { // ENT, ENN
-		copy(dst, address)
-	}
+func (inst *IO) Do(m *MIXArch) {
+	/*
+		// Involves rX somehow with posiitoning device
+		L, R := FieldSpec(inst)
+		// need to attach device to machine
+		device := m.Devices[8*L+R]
+		start := toNum(Address(inst))
+		end := start + len(device) + 1
+		switch Code(inst) {
+		case 35: // IOC
+		m.Devices.Control(device) or device.Reset if behavior is pretty uniform
+		case 36: // IN
+		// Not really what I want, copies over MIXBytes
+		copy(m.Mem[start:end], device)
+		// make some device.Write(m.Mem, start)
+		case 37: // OUT
+		// device.Read(m.Mem, start)
+		case 34: // JBUS
+		case 38: // JRED
+		}
+	*/
 }
-func (inst *AddressTransfer) Fields() MIXBytes { return inst.fields }
-func (inst *AddressTransfer) Duration() int    { return 2 }
-
-type Compare struct {
-	fields MIXBytes
-	rI     MIXByte
-}
-
-func newCmp(c, rI MIXByte) *Compare {
-	return &Compare{
-		fields: defaultFields(0, 5, c),
-		rI:     rI,
-	}
-}
-func (inst *Compare) Do(m *MIXArch) {
-	L, R := FieldSpec(inst)
-	rSlice := m.R[inst.rI].Raw().Slice(L, R)
-	cellSlice := m.Cell(inst).Slice(L, R)
-	rNum, cellNum := toNum(rSlice), toNum(cellSlice)
-	m.SetComparisons(rNum < cellNum, rNum == cellNum, rNum > cellNum)
-}
-func (inst *Compare) Fields() MIXBytes { return inst.fields }
-func (inst *Compare) Duration() int    { return 2 }
+func (inst *IO) Fields() MIXBytes { return inst.fields }
+func (inst *IO) Duration() int    { return 2 }
 
 type Jump struct {
 	fields MIXBytes
@@ -278,3 +271,52 @@ func (inst *Jump) Do(m *MIXArch) {
 }
 func (inst *Jump) Fields() MIXBytes { return inst.fields }
 func (inst *Jump) Duration() int    { return 2 }
+
+type AddressTransfer struct {
+	fields MIXBytes
+	rI     MIXByte
+}
+
+func newAddressTransfer(R, c, rI MIXByte) *AddressTransfer {
+	return &AddressTransfer{
+		fields: defaultFields(0, R, c),
+		rI:     rI,
+	}
+}
+func (inst *AddressTransfer) Do(m *MIXArch) {
+	_, R := FieldSpec(inst)
+	address := Address(inst)
+	if R%2 == 1 { // DEC, ENN
+		address = address.Negate()
+	}
+	if dst := m.R[inst.rI]; R < 2 { // INC, DEC
+		sum, overflowed := dst.Raw().Add(address)
+		m.OverflowToggle = overflowed
+		copy(dst, sum)
+	} else { // ENT, ENN
+		copy(dst, address)
+	}
+}
+func (inst *AddressTransfer) Fields() MIXBytes { return inst.fields }
+func (inst *AddressTransfer) Duration() int    { return 2 }
+
+type Compare struct {
+	fields MIXBytes
+	rI     MIXByte
+}
+
+func newCmp(c, rI MIXByte) *Compare {
+	return &Compare{
+		fields: defaultFields(0, 5, c),
+		rI:     rI,
+	}
+}
+func (inst *Compare) Do(m *MIXArch) {
+	L, R := FieldSpec(inst)
+	rSlice := m.R[inst.rI].Raw().Slice(L, R)
+	cellSlice := m.Cell(inst).Slice(L, R)
+	rNum, cellNum := toNum(rSlice), toNum(cellSlice)
+	m.SetComparisons(rNum < cellNum, rNum == cellNum, rNum > cellNum)
+}
+func (inst *Compare) Fields() MIXBytes { return inst.fields }
+func (inst *Compare) Duration() int    { return 2 }
