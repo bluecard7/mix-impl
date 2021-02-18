@@ -1,5 +1,8 @@
 package main
 
+// NOP and HLT are consumed at the intepretor level,
+// so they don't have an actual definition here.
+
 type Instruction interface {
 	Do(m *MIXArch)
 	Fields() MIXBytes
@@ -67,6 +70,29 @@ func (inst *Shift) Do(m *MIXArch) {
 }
 func (inst *Shift) Fields() MIXBytes { return inst.fields }
 func (inst *Shift) Duration() int    { return 2 }
+
+type Move struct {
+	fields MIXBytes
+}
+
+func newMove(F MIXByte) *Move {
+	// weird to put F here, but once extracted, it will be "fine"
+	return &Move{fields: defaultFields(0, F, 7)}
+}
+
+func (inst *Move) Do(m *MIXArch) {
+	L, R = FieldSpec(inst)
+	mvAmt, srcI, dstI := 8*L+R, toNum(Address(inst)), toNum(m.R[I1])
+	if srcI == dstI { // then nop, copies cell to itself
+		return
+	}
+	for i := 0; i < mvAmt; i++ {
+		copy(m.Mem[dstI+i], m.Mem[srcI+i])
+	}
+	copy(m.R[I1], toMIXBytes(dstI+mvAmt, 2))
+}
+func (inst *Move) Fields() MIXBytes { return inst.fields }
+func (inst *Move) Duration() int    { return 2 }
 
 type Load struct {
 	fields MIXBytes
