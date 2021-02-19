@@ -40,6 +40,8 @@ func newConv(R MIXByte) *Convert {
 }
 
 // TODO:: conversions NUM and CHAR
+func (inst *Convert) Fields() MIXBytes { return inst.fields }
+func (inst *Convert) Duration() int    { return 10 }
 
 type Shift struct {
 	fields MIXBytes
@@ -110,7 +112,10 @@ func (inst *Move) Effect(m *MIXArch) *Snapshot {
 	return snapshot
 }
 func (inst *Move) Fields() MIXBytes { return inst.fields }
-func (inst *Move) Duration() int    { return 2 }
+func (inst *Move) Duration() int {
+	L, R := FieldSpec(inst)
+	return 1 + 2*int(8*L+R)
+}
 
 type Load struct {
 	fields MIXBytes
@@ -212,7 +217,7 @@ func (inst *IO) Effect(m *MIXArch) *Snapshot {
 	return new(Snapshot)
 }
 func (inst *IO) Fields() MIXBytes { return inst.fields }
-func (inst *IO) Duration() int    { return 2 }
+func (inst *IO) Duration() int    { return 1 }
 
 type Jump struct {
 	fields MIXBytes
@@ -298,7 +303,7 @@ func (inst *Jump) Effect(m *MIXArch) *Snapshot {
 	return snapshot
 }
 func (inst *Jump) Fields() MIXBytes { return inst.fields }
-func (inst *Jump) Duration() int    { return 2 }
+func (inst *Jump) Duration() int    { return 1 }
 
 type AddressTransfer struct {
 	fields MIXBytes
@@ -330,7 +335,7 @@ func (inst *AddressTransfer) Effect(m *MIXArch) *Snapshot {
 	return snapshot
 }
 func (inst *AddressTransfer) Fields() MIXBytes { return inst.fields }
-func (inst *AddressTransfer) Duration() int    { return 2 }
+func (inst *AddressTransfer) Duration() int    { return 1 }
 
 type Compare struct {
 	fields MIXBytes
