@@ -95,10 +95,10 @@ func NewWord(data ...MIXByte) MIXBytes {
 // toNum returns the numeric value of a group of continguous MIX bytes.
 // The first MIX byte will be interpreted as a sign (positive or negative).
 // (max value is 2^31-1)
-func toNum(mixBytes MIXBytes) (value int64) {
+func toNum(mixBytes MIXBytes) (value int) {
 	for i := 1; i < len(mixBytes); i++ {
 		value <<= 6
-		value += int64(mixBytes[i]) & 63
+		value += int(mixBytes[i] & 63)
 	}
 	if mixBytes[0] == NEG_SIGN {
 		value = -value
@@ -108,7 +108,7 @@ func toNum(mixBytes MIXBytes) (value int64) {
 
 // toMIXBytes converts the given value to a slice of MIX bytes with len size.
 // The value will be truncated if it exceeds the allowed capacity.
-func toMIXBytes(value int64, size int) MIXBytes {
+func toMIXBytes(value, size int) MIXBytes {
 	mixBytes := make(MIXBytes, size+1)
 	if value < 0 {
 		mixBytes[0] = NEG_SIGN
@@ -153,7 +153,7 @@ func (r Register) Raw() MIXBytes {
 type MIXArch struct {
 	R                   []Register
 	Mem                 []MIXBytes
-	PC                  MIXBytes // program counter
+	PC                  int // program counter
 	OverflowToggle      bool
 	ComparisonIndicator struct {
 		Less, Equal, Greater bool
@@ -169,8 +169,8 @@ func (m *MIXArch) Cell(inst Instruction) MIXBytes {
 	return machine.Mem[address]
 }
 
-func (m *MIXArch) Exec(inst Instruction) {
-	inst.Do(m)
+func (m *MIXArch) Exec(inst Instruction) *Snapshot {
+	return inst.Effect(m)
 }
 
 func (m *MIXArch) SetComparisons(lt, eq, gt bool) {

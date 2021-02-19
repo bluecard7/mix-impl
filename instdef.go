@@ -1,10 +1,7 @@
 package main
 
-// NOP and HLT are consumed at the intepretor level,
-// so they don't have an actual definition here.
-
 type Instruction interface {
-	Do(m *MIXArch)
+	Effect(m *MIXArch) *Snapshot
 	Fields() MIXBytes
 	Duration() int
 }
@@ -18,7 +15,7 @@ func newAdd(c MIXByte) *Add {
 		fields: defaultFields(0, 5, c),
 	}
 }
-func (inst *Add) Do(m *MIXArch) {
+func (inst *Add) Effect(m *MIXArch) *Snapshot {
 	data := m.Cell(inst).Slice(FieldSpec(inst))
 	if Code(inst) == 2 {
 		data = data.Negate()
@@ -26,6 +23,10 @@ func (inst *Add) Do(m *MIXArch) {
 	sum, overflowed := m.R[A].Raw().Add(data)
 	m.OverflowToggle = overflowed
 	copy(m.R[A], sum)
+
+	snapshot := new(Snapshot)
+	snapshot.includesR(A, m.R[A])
+	return snapshot
 }
 func (inst *Add) Fields() MIXBytes { return inst.fields }
 func (inst *Add) Duration() int    { return 2 }
@@ -47,15 +48,18 @@ type Shift struct {
 func newShift(R MIXByte) *Shift {
 	return &Shift{defaultFields(0, R, 6)}
 }
-func (inst *Shift) Do(m *MIXArch) {
+func (inst *Shift) Effect(m *MIXArch) *Snapshot {
+	snapshot := new(Snapshot)
+	defer func() { snapshot.includesR(A, m.R[A]) }()
 	rData := make(MIXBytes, 5)
 	copy(rData, m.R[A].Data())
 	_, R := FieldSpec(inst)
 	if 1 < R { // shifts rA + rX (data only, not signs)
 		rData = append(rData, m.R[X].Raw().Data()...)
+		defer func() { snapshot.includesR(X, m.R[X]) }()
 	}
 	var (
-		size     = int64(len(rData))
+		size     = len(rData)
 		shiftAmt = toNum(Address(inst)) % size
 		removed  = make(MIXBytes, shiftAmt)
 		vacant   MIXBytes
@@ -77,6 +81,7 @@ func (inst *Shift) Do(m *MIXArch) {
 	}
 	copy(m.R[A].Data(), rData)
 	copy(m.R[X].Data(), rData[5:]) // think nop if rX wasn't included in shift
+	return snapshot
 }
 func (inst *Shift) Fields() MIXBytes { return inst.fields }
 func (inst *Shift) Duration() int    { return 2 }
@@ -90,16 +95,19 @@ func newMove(F MIXByte) *Move {
 	return &Move{fields: defaultFields(0, F, 7)}
 }
 
-func (inst *Move) Do(m *MIXArch) {
+func (inst *Move) Effect(m *MIXArch) *Snapshot {
+	snapshot := new(Snapshot)
 	L, R := FieldSpec(inst)
-	mvAmt, srcI, dstI := int64(8*L+R), toNum(Address(inst)), toNum(m.R[I1].Raw())
-	if srcI == dstI { // then nop, copies cell to itself
-		return
+	mvAmt, srcI, dstI := int(8*L+R), toNum(Address(inst)), toNum(m.R[I1].Raw())
+	if srcI != dstI { // nop otherwise, copies cell to itself
+		for i := 0; i < mvAmt; i++ {
+			copy(m.Mem[dstI+i], m.Mem[srcI+i])
+			defer func() { snapshot.includesCell(dstI+i, m.Mem[dstI+i]) }()
+		}
+		copy(m.R[I1], toMIXBytes(dstI+mvAmt, 2))
+		defer func() { snapshot.includesR(I1, m.R[I1]) }()
 	}
-	for i := int64(0); i < mvAmt; i++ {
-		copy(m.Mem[dstI+i], m.Mem[srcI+i])
-	}
-	copy(m.R[I1], toMIXBytes(dstI+mvAmt, 2))
+	return snapshot
 }
 func (inst *Move) Fields() MIXBytes { return inst.fields }
 func (inst *Move) Duration() int    { return 2 }
@@ -115,7 +123,7 @@ func newLD(c, rI MIXByte) *Load {
 		rI:     rI,
 	}
 }
-func (inst *Load) Do(m *MIXArch) {
+func (inst *Load) Effect(m *MIXArch) *Snapshot {
 	data := m.Cell(inst)
 	if 15 < Code(inst) {
 		data = data.Negate()
@@ -128,6 +136,10 @@ func (inst *Load) Do(m *MIXArch) {
 		amtToCpy = len(dst) - 1
 	}
 	copy(dst[len(dst)-amtToCpy:], s.Data()[len(s.Data())-amtToCpy:])
+
+	snapshot := new(Snapshot)
+	snapshot.includesR(int(inst.rI), dst)
+	return snapshot
 }
 func (inst *Load) Fields() MIXBytes { return inst.fields }
 func (inst *Load) Duration() int    { return 2 }
@@ -147,7 +159,7 @@ func newST(c, rI MIXByte) *Store {
 	}
 	return st
 }
-func (inst *Store) Do(m *MIXArch) {
+func (inst *Store) Effect(m *MIXArch) *Snapshot {
 	src := m.R[inst.rI]
 	switch true {
 	case I1 <= inst.rI && inst.rI <= I6:
@@ -162,6 +174,9 @@ func (inst *Store) Do(m *MIXArch) {
 		L = 1
 	}
 	copy(cell[L:R+1], src[len(src)-int(R-L+1):])
+	snapshot := new(Snapshot)
+	snapshot.includesCell(int(toNum(Address(inst))), cell)
+	return snapshot
 }
 func (inst *Store) Fields() MIXBytes { return inst.fields }
 func (inst *Store) Duration() int    { return 2 }
@@ -173,7 +188,7 @@ type IO struct {
 func newIO(R, c MIXByte) *IO {
 	return &IO{defaultFields(0, R, c)}
 }
-func (inst *IO) Do(m *MIXArch) {
+func (inst *IO) Effect(m *MIXArch) *Snapshot {
 	/*
 		// Involves rX somehow with posiitoning device
 		L, R := FieldSpec(inst)
@@ -194,6 +209,7 @@ func (inst *IO) Do(m *MIXArch) {
 		case 38: // JRED
 		}
 	*/
+	return new(Snapshot)
 }
 func (inst *IO) Fields() MIXBytes { return inst.fields }
 func (inst *IO) Duration() int    { return 2 }
@@ -209,65 +225,77 @@ func newJmp(R, c, rI MIXByte) *Jump {
 		rI:     rI,
 	}
 }
-func (inst *Jump) Do(m *MIXArch) {
+func (inst *Jump) Effect(m *MIXArch) *Snapshot {
 	_, R := FieldSpec(inst)
 	c, address := Code(inst), Address(inst)
 
 	// comparison flags and values are gathered
 	// here to avoid repeating later.
 	lt, eq, gt := m.Comparisons()
-	var v int64
+	var v int
 	if 39 < c {
 		v = toNum(m.R[inst.rI].Raw())
 	}
 
 	// Jumping seems to consist of writing to
 	// rJ and PC.
-	setJmp := func() {
+	_setJmp := func() {
 		copy(m.R[J], address)
-		copy(m.PC, address)
+		m.PC = toNum(address)
 	}
+
+	snapshot := new(Snapshot)
+	isSet := true
 
 	switch true {
 	case c == 39 && R == 0: // JMP
-		setJmp()
+		_setJmp()
 	case c == 39 && R == 1: // JSJ
-		copy(m.PC, address)
+		m.PC = toNum(address)
+		isSet = false
 	case c == 39 && R == 2: // JOV
 		if m.OverflowToggle {
-			setJmp()
+			_setJmp()
+		} else {
+			isSet = false
 		}
 		m.OverflowToggle = false
 	case c == 39 && R == 3: // JNOV
 		if !m.OverflowToggle {
-			setJmp()
+			_setJmp()
+		} else {
+			isSet = false
 		}
 		m.OverflowToggle = false
 	case c == 39 && R == 4 && lt: // JL
-		setJmp()
+		_setJmp()
 	case c == 39 && R == 5 && eq: // JE
-		setJmp()
+		_setJmp()
 	case c == 39 && R == 6 && gt: // JG
-		setJmp()
+		_setJmp()
 	case c == 39 && R == 7 && eq && gt: // JGE
-		setJmp()
+		_setJmp()
 	case c == 39 && R == 8 && lt && gt: // JNE
-		setJmp()
+		_setJmp()
 	case c == 39 && R == 9 && lt && eq: // JLE
-		setJmp()
+		_setJmp()
 	case 39 < c && R == 0 && v < 0: // J_N
-		setJmp()
+		_setJmp()
 	case 39 < c && R == 1 && v == 0: // J_Z
-		setJmp()
+		_setJmp()
 	case 39 < c && R == 2 && 0 < v: // J_P
-		setJmp()
+		_setJmp()
 	case 39 < c && R == 3 && -1 < v: // J_NN
-		setJmp()
+		_setJmp()
 	case 39 < c && R == 4 && v != 0: // J_NZ
-		setJmp()
+		_setJmp()
 	case 39 < c && R == 5 && v < 1: // J_NP
-		setJmp()
+		_setJmp()
 	}
+	if isSet {
+		snapshot.includesR(J, m.R[J])
+	}
+	return snapshot
 }
 func (inst *Jump) Fields() MIXBytes { return inst.fields }
 func (inst *Jump) Duration() int    { return 2 }
@@ -283,19 +311,23 @@ func newAddressTransfer(R, c, rI MIXByte) *AddressTransfer {
 		rI:     rI,
 	}
 }
-func (inst *AddressTransfer) Do(m *MIXArch) {
+func (inst *AddressTransfer) Effect(m *MIXArch) *Snapshot {
 	_, R := FieldSpec(inst)
 	address := Address(inst)
 	if R%2 == 1 { // DEC, ENN
 		address = address.Negate()
 	}
-	if dst := m.R[inst.rI]; R < 2 { // INC, DEC
+	dst := m.R[inst.rI]
+	if R < 2 { // INC, DEC
 		sum, overflowed := dst.Raw().Add(address)
 		m.OverflowToggle = overflowed
 		copy(dst, sum)
 	} else { // ENT, ENN
 		copy(dst, address)
 	}
+	snapshot := new(Snapshot)
+	snapshot.includesR(int(inst.rI), dst)
+	return snapshot
 }
 func (inst *AddressTransfer) Fields() MIXBytes { return inst.fields }
 func (inst *AddressTransfer) Duration() int    { return 2 }
@@ -311,12 +343,13 @@ func newCmp(c, rI MIXByte) *Compare {
 		rI:     rI,
 	}
 }
-func (inst *Compare) Do(m *MIXArch) {
+func (inst *Compare) Effect(m *MIXArch) *Snapshot {
 	L, R := FieldSpec(inst)
 	rSlice := m.R[inst.rI].Raw().Slice(L, R)
 	cellSlice := m.Cell(inst).Slice(L, R)
 	rNum, cellNum := toNum(rSlice), toNum(cellSlice)
 	m.SetComparisons(rNum < cellNum, rNum == cellNum, rNum > cellNum)
+	return new(Snapshot) // include comparators?
 }
 func (inst *Compare) Fields() MIXBytes { return inst.fields }
 func (inst *Compare) Duration() int    { return 2 }

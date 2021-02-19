@@ -94,7 +94,7 @@ func ParseInst(notation string) (Instruction, error) {
 	if err != nil {
 		return nil, ErrAddress
 	}
-	setAddress(inst, toMIXBytes(v, 2))
+	setAddress(inst, toMIXBytes(int(v), 2))
 	if index != "" {
 		v, err = strconv.ParseInt(index, 10, 8)
 		if err != nil || v < 0 || 6 < v {
