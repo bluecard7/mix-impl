@@ -63,8 +63,10 @@ func Run(m *MIXArch, src io.Reader) (History, error) {
 		return nil, err
 	}
 	history := make(History, len(program))
-	for pos, start := 0, m.PC; pos < len(program); {
-		inst := program[m.PC-start]
+	for timer, pos, entry := 0, 0, m.PC; pos < len(program); {
+		inst := program[m.PC-entry]
+		// TODO:: check if inst is IO for timing implications
+		timer += inst.Duration()
 		effect := m.Exec(inst)
 		history = append(history, effect)
 	}
