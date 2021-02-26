@@ -1,21 +1,27 @@
 package main
 
-type Instruction interface {
-	Effect(m *MIXArch) *Snapshot
-	Fields() MIXBytes
-	Duration() int
-}
+const (
+	C_ADD = 1
+	C_SUB = 2
+	C_LD  = 8
+	C_LDN = 16
+	C_ST  = 24
+)
 
-type Add struct {
-	fields MIXBytes
-}
-
-func newAdd(c MIXByte) *Add {
-	return &Add{
-		fields: defaultFields(0, 5, c),
+func (m *Arch) Exec(inst instruction) {
+	switch c := inst.c(); true {
+	case c == C_ADD:
+		m.Add(inst)
+	case c == C_SUB:
+		m.Add(inst)
+	case C_LD <= c || c < C_ST:
+		m.Load(inst)
+	case C_ST <= c:
+		m.Store(inst)
 	}
 }
-func (inst *Add) Effect(m *MIXArch) *Snapshot {
+
+func (m *Arch) Add(inst instruction) *Snapshot {
 	data := m.Cell(inst).Slice(FieldSpec(inst))
 	if Code(inst) == 2 {
 		data = data.Negate()
@@ -28,28 +34,23 @@ func (inst *Add) Effect(m *MIXArch) *Snapshot {
 	snapshot.includesR(A, m.R[A])
 	return snapshot
 }
-func (inst *Add) Fields() MIXBytes { return inst.fields }
-func (inst *Add) Duration() int    { return 2 }
 
-type Convert struct {
+// func (inst *Add) Duration() int    { return 2 }
+
+/*type Convert struct {
 	fields MIXBytes
 }
-
 func newConv(R MIXByte) *Convert {
 	return &Convert{defaultFields(0, R, 5)}
 }
-
 // TODO:: conversions NUM and CHAR
 func (inst *Convert) Fields() MIXBytes { return inst.fields }
-func (inst *Convert) Duration() int    { return 10 }
+func (inst *Convert) Duration() int    { return 10 }*/
 
-type Shift struct {
-	fields MIXBytes
-}
-
-func newShift(R MIXByte) *Shift {
+/*func newShift(R MIXByte) *Shift {
 	return &Shift{defaultFields(0, R, 6)}
 }
+
 func (inst *Shift) Effect(m *MIXArch) *Snapshot {
 	snapshot := new(Snapshot)
 	defer func() { snapshot.includesR(A, m.R[A]) }()
@@ -85,18 +86,15 @@ func (inst *Shift) Effect(m *MIXArch) *Snapshot {
 	copy(m.R[X].Data(), rData[5:]) // think nop if rX wasn't included in shift
 	return snapshot
 }
-func (inst *Shift) Fields() MIXBytes { return inst.fields }
-func (inst *Shift) Duration() int    { return 2 }
+func (inst *Shift) Duration() int    { return 2 }*/
 
-type Move struct {
+/*type Move struct {
 	fields MIXBytes
 }
-
 func newMove(F MIXByte) *Move {
 	// weird to put F here, but once extracted, it will be "fine"
 	return &Move{fields: defaultFields(0, F, 7)}
 }
-
 func (inst *Move) Effect(m *MIXArch) *Snapshot {
 	snapshot := new(Snapshot)
 	L, R := FieldSpec(inst)
@@ -111,30 +109,26 @@ func (inst *Move) Effect(m *MIXArch) *Snapshot {
 	}
 	return snapshot
 }
-func (inst *Move) Fields() MIXBytes { return inst.fields }
 func (inst *Move) Duration() int {
 	L, R := FieldSpec(inst)
 	return 1 + 2*int(8*L+R)
-}
+}*/
 
-type Load struct {
-	fields MIXBytes
-	rI     MIXByte
-}
-
-func newLD(c, rI MIXByte) *Load {
+/*func newLD(c) *Load {
 	return &Load{
 		fields: defaultFields(0, 5, c),
 		rI:     rI,
 	}
-}
-func (inst *Load) Effect(m *MIXArch) *Snapshot {
-	data := m.Cell(inst)
-	if 15 < Code(inst) {
+}*/
+func (m *Arch) Load(inst instruction) *Snapshot {
+	rI := inst.C() - C_LD
+	data := m.Cell(inst.A())
+	if C_LDN <= inst.C() {
+		rI := inst.C() - C_LDN
 		data = data.Negate()
 	}
-	s := data.Slice(FieldSpec(inst))
-	dst := m.R[inst.rI]
+	s := data.Slice(inst.F())
+	dst := m.R[rI]
 	copy(dst.Raw().Sign(), s.Sign())
 	amtToCpy := len(s.Data())
 	if len(dst)-1 < amtToCpy {
@@ -143,18 +137,13 @@ func (inst *Load) Effect(m *MIXArch) *Snapshot {
 	copy(dst[len(dst)-amtToCpy:], s.Data()[len(s.Data())-amtToCpy:])
 
 	snapshot := new(Snapshot)
-	snapshot.includesR(int(inst.rI), dst)
+	snapshot.includesR(int(rI), dst)
 	return snapshot
 }
-func (inst *Load) Fields() MIXBytes { return inst.fields }
-func (inst *Load) Duration() int    { return 2 }
 
-type Store struct {
-	fields MIXBytes
-	rI     MIXByte
-}
+//func (inst *Load) Duration() int { return 2 }
 
-func newST(c, rI MIXByte) *Store {
+/*func newST(c, rI MIXByte) *Store {
 	st := &Store{
 		fields: defaultFields(0, 5, c),
 		rI:     rI,
@@ -163,30 +152,38 @@ func newST(c, rI MIXByte) *Store {
 		setFieldSpec(st, 0, 2)
 	}
 	return st
-}
-func (inst *Store) Effect(m *MIXArch) *Snapshot {
-	src := m.R[inst.rI]
+}*/
+func (m *Arch) Store(inst instruction) *Snapshot {
+	rI := inst.C() - C_ST
+	if inst.C() == 32 {
+		rI = J
+	}
+	if inst.C() == 33 {
+		rI = A
+	}
+
+	src := m.R[rI]
 	switch true {
-	case I1 <= inst.rI && inst.rI <= I6:
+	case I1 <= rI && rI <= I6:
 		src = append(Register{src[0], 0, 0, 0}, src[1:]...)
-	case Code(inst) == 33:
+	case inst.C() == 33:
 		src = Register(NewWord())
 	}
-	L, R := FieldSpec(inst)
-	cell := m.Cell(inst)
+	L, R := inst.F()
+	cell := m.Cell(inst.A())
 	if L == 0 {
 		copy(cell.Sign(), src.Raw().Sign())
 		L = 1
 	}
 	copy(cell[L:R+1], src[len(src)-int(R-L+1):])
 	snapshot := new(Snapshot)
-	snapshot.includesCell(int(toNum(Address(inst))), cell)
+	snapshot.includesCell(int(toNum(inst.A())), cell)
 	return snapshot
 }
-func (inst *Store) Fields() MIXBytes { return inst.fields }
-func (inst *Store) Duration() int    { return 2 }
 
-type IO struct {
+//func (inst *Store) Duration() int    { return 2 }
+
+/*type IO struct {
 	fields MIXBytes
 }
 
@@ -213,33 +210,24 @@ func (inst *IO) Effect(m *MIXArch) *Snapshot {
 		case 34: // JBUS
 		case 38: // JRED
 		}
-	*/
+
 	return new(Snapshot)
 }
-func (inst *IO) Fields() MIXBytes { return inst.fields }
-func (inst *IO) Duration() int    { return 1 }
-
-type Jump struct {
-	fields MIXBytes
-	rI     MIXByte
-}
+func (inst *IO) Duration() int    { return 1 }*/
 
 func newJmp(R, c, rI MIXByte) *Jump {
-	return &Jump{
-		fields: defaultFields(0, R, c),
-		rI:     rI,
-	}
 }
-func (inst *Jump) Effect(m *MIXArch) *Snapshot {
+func (m *Arch) Jump(inst instruction) *Snapshot {
 	_, R := FieldSpec(inst)
-	c, address := Code(inst), Address(inst)
+	c, address := inst.c().inst.a()
 
 	// comparison flags and values are gathered
 	// here to avoid repeating later.
 	lt, eq, gt := m.Comparisons()
 	var v int
-	if 39 < c {
-		v = toNum(m.R[inst.rI].Raw())
+	if 39 < inst.c() {
+		rI := inst.c() - 40
+		v = toNum(m.R[rI].Raw())
 	}
 
 	// Jumping seems to consist of writing to
@@ -302,10 +290,10 @@ func (inst *Jump) Effect(m *MIXArch) *Snapshot {
 	}
 	return snapshot
 }
-func (inst *Jump) Fields() MIXBytes { return inst.fields }
-func (inst *Jump) Duration() int    { return 1 }
 
-type AddressTransfer struct {
+//func (inst *Jump) Duration() int    { return 1 }
+
+/*type AddressTransfer struct {
 	fields MIXBytes
 	rI     MIXByte
 }
@@ -334,7 +322,6 @@ func (inst *AddressTransfer) Effect(m *MIXArch) *Snapshot {
 	snapshot.includesR(int(inst.rI), dst)
 	return snapshot
 }
-func (inst *AddressTransfer) Fields() MIXBytes { return inst.fields }
 func (inst *AddressTransfer) Duration() int    { return 1 }
 
 type Compare struct {
@@ -356,5 +343,4 @@ func (inst *Compare) Effect(m *MIXArch) *Snapshot {
 	m.SetComparisons(rNum < cellNum, rNum == cellNum, rNum > cellNum)
 	return new(Snapshot) // include comparators?
 }
-func (inst *Compare) Fields() MIXBytes { return inst.fields }
-func (inst *Compare) Duration() int    { return 2 }
+func (inst *Compare) Duration() int    { return 2 }*/

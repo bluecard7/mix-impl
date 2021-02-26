@@ -7,57 +7,43 @@ import (
 	"strconv"
 )
 
-// defaultFields returns a MIX word that represents the default information
-// format. The defaults are no address, no index register, and the given field range
-// and op code c.
-func defaultFields(L, R, c MIXByte) MIXBytes {
-	f := 8*L + R
-	return NewWord(POS_SIGN, 0, 0, 0, f, c)
-}
+type Instruction Word
 
 // A returns the address of inst (sign, A, A)
 // indexed by the index register at inst.I().
-func Address(inst Instruction) MIXBytes {
-	// index := machine.R[I1+int(I(inst))-1].Raw() // probably do this when reading a cell in machine
-	return inst.Fields()[:3]
+func (inst Instruction) a() int {
+	return Word(inst).value(0, 2)
 }
 
-func setAddress(inst Instruction, newA MIXBytes) {
-	if len(newA) == 3 {
-		copy(inst.Fields(), newA)
-	}
-}
+// write func to index address? or just make it part of a?
+// Q: is address always indexed, even for INC, DEC, ENT?
+
+// defer setting things
 
 // I returns the index register of inst (I).
-func Index(inst Instruction) MIXByte {
-	return inst.Fields()[3]
-}
-
-func setIndex(inst Instruction, newI MIXByte) {
-	inst.Fields()[3] = newI
+func i(inst Instruction) int {
+	return Word(inst).value(3, 3)
 }
 
 // F returns the field specification of inst (F).
 // It is expressed as (L:R), rather than one number.
-func FieldSpec(inst Instruction, newF ...MIXByte) (L, R MIXByte) {
-	f := inst.Fields()[4]
-	return f / 8, f % 8
+func (inst Instruction) f() int {
+	return Word(inst).value(4, 4)
 }
 
-func setFieldSpec(inst Instruction, L, R MIXByte) {
-	inst.Fields()[4] = 8*L + R
+func (inst Instruction) fLR() (L, R int) {
+	return int(inst.f() / 8), inst.f() % 8
 }
 
 // C returns the opcode of inst (C).
-func Code(inst Instruction) MIXByte {
-	return inst.Fields()[5]
+func (inst Instruction) c() int {
+	return Word(inst).value(5, 5)
 }
 
 func repr(inst Instruction) string {
-	L, R := FieldSpec(inst)
 	return fmt.Sprintf(
 		"Address: %v\nIndex: %v\nFieldSpec: [%d:%d]\nOpCode: %v",
-		Address(inst), Index(inst), L, R, Code(inst),
+		Address(inst), Index(inst), inst.fLR(), Code(inst),
 	)
 }
 

@@ -1,124 +1,78 @@
 package main
 
-type MIXByte byte
-type MIXBytes []MIXByte
+type Byte byte
+type ByteSequence int64 //
 
-// NewByte returns a MIXByte with the value of the given data.
-// Since a byte in MIX needs to hold at least 64 distinct values,
+// NewByte returns a Byte with the value of the given data.
+// Since a byte in  needs to hold at least 64 distinct values,
 // data must be in the range [0, 63].
 // If data is negative or > 63, then it will be treated as 0.
-func NewByte(data MIXByte) MIXByte {
+func NewByte(data byte) Byte {
 	if data < 0 || 63 < data {
 		data = 0
 	}
-	return MIXByte(data)
+	return Byte(data)
 }
 
 const (
-	POS_SIGN MIXByte = 0
-	NEG_SIGN         = 1
-
+	POS_SIGN  = 0
+	NEG_SIGN  = 1
 	WORD_SIZE = 6
 )
 
-func (b MIXBytes) Sign() MIXBytes {
-	return b[:1]
+type Word int
+
+func (b Word) sign() int {
+	return b & 0x80000000 // first bit used as sign, 1 is negative
 }
 
-func (b MIXBytes) Data() MIXBytes {
-	return b[1:]
+func (b Word) data() int {
+	return b & 0x3FFFFFFF // last 30 bits used as data, 6 bits/Byte
 }
 
-// Slice returns the MIXBytes in [L:R].
+// slice returns the Word in [L:R].
 // A sign is added if it isn't included in the slice.
-func (b MIXBytes) Slice(L, R MIXByte) (s MIXBytes) {
-	s = b[L : R+1]
-	if 0 < L {
-		s = append(MIXBytes{POS_SIGN}, s...)
+
+// NOT REALLY A SLICE - its a masked version that has the specified region (L:R)
+// Can't really tell which portion is a slice after return...
+// is the solution for this is to impl slice headers...like in go?
+// Or do I even need to deal with slices?
+// for copy, would just need a dst, a src, and a field spec
+func (w Word) slice(L, R int) (s Word) {
+	if L == 0 {
+		s = s | s.sign()
+		L = 1
 	}
-	return s
+	mask, bytePos := 0x00000000, 0x0000003F
+	for i := 5; L <= i; i-- {
+		if L <= i || i <= R {
+			mask |= bytePos
+		}
+		bytePos <<= 6
+	}
+	return s | (w.data() & mask)
 }
 
-// Negate takes b and treats the MIXByte at index 0 as a sign.
+func (w Word) value(L, R int) (v int) {
+	s := w.slice(L, R)
+	v := s.data()
+	for i := 5; R < i; i-- {
+		v >>= 6
+	}
+	if s < 0 {
+		v = -v
+	}
+	return v
+}
+
+// Negate takes b and treats the Byte at index 0 as a sign.
 // It returns a copy with the opposite sign.
-func (b MIXBytes) Negate() (negated MIXBytes) {
-	opposite := POS_SIGN
-	if b[0] == POS_SIGN {
-		opposite = NEG_SIGN
-	}
-	return append(MIXBytes{opposite}, b.Data()...)
+func (w Word) negate() Word {
+	return w ^ 0x80000000
 }
 
-// Creates MIXBytes of specified size, fills with zeros if
-// b is smaller than size
-//func (b MIXBytes) Padded(size int) MIXBytes {
-//}
-
-// Equals method for slice of MIXBytes
-func (left MIXBytes) Equals(right MIXBytes) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func (left MIXBytes) Add(right MIXBytes) (MIXBytes, bool) {
-	var overflowed bool
-	sum := toNum(left) + toNum(right)
-	if sum > 2<<31-1 {
-		overflowed = true
-	}
-	return toMIXBytes(sum, 5), overflowed
-}
-
-// NewWord returns MIXBytes(len 6) holding the given data.
-// The given sequence (data) will be interpreted as: the sign, then MIX bytes 1, 2, ..., 5.
-// If more values are given, they are ignored.
-// The given values will be subject to the conditions stated in NewByte, as
-// each byte in data is converted into a MIXByte through NewByte.
-func NewWord(data ...MIXByte) MIXBytes {
-	word := make(MIXBytes, 6)
-	for i, datum := range data {
-		if 6 < i {
-			break
-		}
-		word[i] = NewByte(datum)
-	}
-	return word
-}
-
-// toNum returns the numeric value of a group of continguous MIX bytes.
-// The first MIX byte will be interpreted as a sign (positive or negative).
-// (max value is 2^31-1)
-func toNum(mixBytes MIXBytes) (value int) {
-	for i := 1; i < len(mixBytes); i++ {
-		value <<= 6
-		value += int(mixBytes[i] & 63)
-	}
-	if mixBytes[0] == NEG_SIGN {
-		value = -value
-	}
-	return value
-}
-
-// toMIXBytes converts the given value to a slice of MIX bytes with len size.
-// The value will be truncated if it exceeds the allowed capacity.
-func toMIXBytes(value, size int) MIXBytes {
-	mixBytes := make(MIXBytes, size+1)
-	if value < 0 {
-		mixBytes[0] = NEG_SIGN
-		value = -value
-	}
-	for i := len(mixBytes) - 1; i > 0 && value > 0; i-- {
-		mixBytes[i] = NewByte(MIXByte(value & 63))
-		value >>= 6
-	}
-	return mixBytes
+func (left Word) Add(right Word) (Word, bool) {
+	return left + right, left < left+right
 }
 
 const (
@@ -134,25 +88,10 @@ const (
 	NoR // No register
 )
 
-// Registers use the index 0 as sign and the rest for data
-type Register MIXBytes
-
-func (r Register) Sign() MIXBytes {
-	return r.Raw().Sign()
-}
-
-func (r Register) Data() MIXBytes {
-	return r.Raw().Data()
-}
-
-func (r Register) Raw() MIXBytes {
-	return MIXBytes(r)
-}
-
-// MIXArch defines the hardware/architecture elements of the MIX machine
-type MIXArch struct {
+// Arch defines the hardware/architecture elements of the  machine
+type Arch struct {
 	R                   []Register
-	Mem                 []MIXBytes
+	Mem                 []Word
 	PC                  int // program counter
 	OverflowToggle      bool
 	ComparisonIndicator struct {
@@ -160,50 +99,31 @@ type MIXArch struct {
 	}
 }
 
-// Cell returns the MIX word at the memory cell at address, indexed by I register.
-func (m *MIXArch) Cell(inst Instruction) MIXBytes {
-	address, index := toNum(Address(inst)), Index(inst)
-	if 0 < index {
-		address += toNum(m.R[I1+int(index)-1].Raw())
-	}
+// Cell returns the  word at the memory cell at address, indexed by I register.
+func (m *Arch) Cell(address int) Word {
 	return machine.Mem[address]
 }
 
-func (m *MIXArch) Exec(inst Instruction) *Snapshot {
-	return inst.Effect(m)
-}
-
-func (m *MIXArch) SetComparisons(lt, eq, gt bool) {
+func (m *Arch) SetComparisons(lt, eq, gt bool) {
 	m.ComparisonIndicator.Less = lt
 	m.ComparisonIndicator.Equal = eq
 	m.ComparisonIndicator.Greater = gt
 }
 
-func (m *MIXArch) Comparisons() (bool, bool, bool) {
+func (m *Arch) Comparisons() (bool, bool, bool) {
 	return m.ComparisonIndicator.Less, m.ComparisonIndicator.Equal, m.ComparisonIndicator.Greater
 }
 
-// NewMachine creates a new instance of MIXArch
-func NewMachine() *MIXArch {
-	machine := &MIXArch{
+// NewMachine creates a new instance of Arch
+func NewMachine() *Arch {
+	machine := &Arch{
 		R:   make([]Register, 9),
-		Mem: make([]MIXBytes, 4000),
+		Mem: make([]Word, 4000),
 		ComparisonIndicator: struct {
 			Less, Equal, Greater bool
 		}{},
 	}
-	machine.R[A] = make(Register, 6)
-	machine.R[X] = make(Register, 6)
-	machine.R[I1] = make(Register, 3)
-	machine.R[I2] = make(Register, 3)
-	machine.R[I3] = make(Register, 3)
-	machine.R[I4] = make(Register, 3)
-	machine.R[I5] = make(Register, 3)
-	machine.R[I6] = make(Register, 3)
-	machine.R[J] = make(Register, 3)
-	for i := range machine.Mem {
-		machine.Mem[i] = NewWord()
-	}
+	// add func to deal with 2 Byte registers?
 	return machine
 }
 
