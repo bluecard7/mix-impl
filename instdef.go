@@ -112,40 +112,20 @@ func (inst *Move) Duration() int {
 	return 1 + 2*int(8*L+R)
 }*/
 
-/*func newLD(c) *Load {
-	return &Load{
-		fields: defaultFields(0, 5, c),
-		rI:     rI,
-	}
-}*/
-func (m *Arch) Load(inst instruction) *Snapshot {
+func (m *Arch) Load(inst instruction) {
 	rI := inst.c() - C_LD
 	data := m.Cell(inst.a())
 	if C_LDN <= inst.c() {
 		rI = inst.c() - C_LDN
 		data = data.negate()
 	}
-	L, R := inst.fLR
-	s := data.slice(L, R)
-	tmp := m.R[rI]
-
-	// s is either positive bc L != 0 or data's sign
-	if tmp.sign() != s.sign() {
-		tmp.negate()
+	regSlice := m.R[rI]
+	if regSlice.word.sign() != data.sign() { // s is either positive bc L != 0 or data's sign
+		regSlice.word.negate()
 	}
-	amtToCpy := R - L + 1
-	if m.rLen(rI) < amtToCpy {
-		amtToCpy = m.rLen(rI)
-	}
-	// copy(dst[len(dst)-amtToCpy:], s.Data()[len(s.Data())-amtToCpy:])
-	//bitCopy({tmp, m.rLen(rI) - amtToCpy, m.rLen(rI)}, {s, s.len()-amtToCpy, s.len()})
-
-	return new(Snapshot)
-	//snapshot.includesR(int(rI), dst)
-	//return snapshot
+	regSlice.copy(data.slice(inst.fLR()))
+	// above should've changed m.R[rI]
 }
-
-//func (inst *Load) Duration() int { return 2 }
 
 /*func newST(c, rI MIXByte) *Store {
 	st := &Store{
@@ -157,7 +137,7 @@ func (m *Arch) Load(inst instruction) *Snapshot {
 	}
 	return st
 }*/
-func (m *Arch) Store(inst instruction) *Snapshot {
+func (m *Arch) Store(inst instruction) {
 	var rI int
 	switch inst.c() {
 	case 32:
@@ -167,27 +147,21 @@ func (m *Arch) Store(inst instruction) *Snapshot {
 	default:
 		rI = inst.c() - C_ST
 	}
-
-	tmp := 0
+	var regSlice *bitslice
 	switch true {
-	case I1 <= rI && rI <= I6: // need to structure index reg like this
-		//src = append(Register{src[0], 0, 0, 0}, src[1:]...)
+	case I1 <= rI && rI <= I6:
+		regWord := m.R[rI].word
+		regWord = regWord.sign() | regWord.data()>>18
+		regSlice = regWord.slice(0, 5)
 	case inst.c() < 33:
-		tmp = m.R[rI]
+		regSlice = m.R[rI]
+	default: //STZ
+		regSlice = Word(0).slice(0, 5)
 	}
-	L, R := inst.fLR()
-	cell := m.Cell(inst.a())
-	if L == 0 && tmp.sign() != cell.sign() {
-		tmp.negate()
-		L = 1
-	}
-	//copy(cell[L:R+1], src[len(src)-int(R-L+1):])
-	// cleaner if using pointer for cell?
-	//bitCopy({cell, L, R+1}, {tmp, tmp.len()-R-L+1, tmp.len()})
-
-	snapshot := new(Snapshot)
-	snapshot.includesCell(int(toNum(inst.A())), cell)
-	return snapshot
+	cellSlice := m.Read(inst.a()).slice(inst.fLR())
+	// is sign accounted for?
+	cellSlice.copy(regSlice)
+	m.Write(inst.a(), cellSlice.word)
 }
 
 //func (inst *Store) Duration() int    { return 2 }

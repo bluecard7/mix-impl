@@ -1,5 +1,6 @@
 package main
 
+/*
 import (
 	"bufio"
 	"fmt"
@@ -21,3 +22,4 @@ func Shell() {
 		// if halt, ok := inst.(Halt); ok { return }
 	}
 }
+*/

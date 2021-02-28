@@ -11,6 +11,10 @@ type bitslice struct {
 	start, end int // change to byte
 }
 
+func composeWord(sign, b1, b2, b3, b4, b5 byte) Word {
+	return (sign&1)<<30 | (b1&63)<<24 | (b2&63)<<18 | (b3&63)<<12 | (b4&63)<<6 | (b5 & 63)
+}
+
 func (w Word) sign() Word {
 	return w & 0x40000000 // first bit used as sign, 1 is negative
 }
@@ -27,14 +31,28 @@ func (left Word) add(right Word) (sum Word, overflowed bool) {
 	return left + right, left < left+right
 }
 
+func bitmask(L, R int) (mask Word) {
+	if L == 0 {
+		mask = 1 << 30
+		L = 1
+	}
+	var bytePos Word = 0x3F << ((WORDSIZE - R) * BYTESIZE)
+	for i := R; L <= i; i-- {
+		mask |= bytePos
+		bytePos <<= BYTESIZE
+	}
+	return mask
+}
+
 // slice returns the Word in [L:R].
 // positive if sign isn't included in the slice.
 func (w Word) slice(L, R int) (s *bitslice) {
+	w &= bitmask(L, R)
 	return &bitslice{w, L, R}
 }
 
-func (s *bitslice) value() (v Word) {
-	v = s.word.data() & s.bitmask()
+func (s *bitslice) value() (v int) {
+	v = int(s.word.data() & bitmask(s.start, s.end))
 	v >>= (WORDSIZE - s.end) * BYTESIZE
 	if 0 < s.word.sign() {
 		v = -v
@@ -60,20 +78,6 @@ func (s1 *bitslice) distance(s2 *bitslice) int {
 	return s1Start - s2Start
 }
 
-func (s *bitslice) bitmask() (mask Word) {
-	L, R := s.start, s.end
-	if L == 0 {
-		mask = 1 << 30
-		L = 1
-	}
-	var bytePos Word = 0x3F << ((WORDSIZE - R) * BYTESIZE)
-	for i := R; L <= i; i-- {
-		mask |= bytePos
-		bytePos <<= BYTESIZE
-	}
-	return mask
-}
-
 func (dst *bitslice) copy(src *bitslice) {
 	srcWord := src.word
 	// prefer larger indices if data amt described by src is larger than amt in dst
@@ -85,7 +89,7 @@ func (dst *bitslice) copy(src *bitslice) {
 	} else {
 		srcWord >>= shiftAmt * BYTESIZE
 	}
-	mask := dst.bitmask()
+	mask := bitmask(dst.start, dst.end)
 	dst.word &= mask ^ 0x7FFFFFFF // zero out portion to be written to
 	dst.word |= srcWord & mask
 }
@@ -103,11 +107,9 @@ const (
 	NoR // No register
 )
 
-type Register *bitslice
-
 // Arch defines the hardware/architecture elements of the  machine
 type Arch struct {
-	R                   []Register
+	R                   []*bitslice
 	Mem                 []Word
 	PC                  int // program counter
 	OverflowToggle      bool
@@ -137,7 +139,7 @@ func (m *Arch) Comparisons() (bool, bool, bool) {
 // NewMachine creates a new instance of Arch
 func NewMachine() *Arch {
 	machine := &Arch{
-		R:   make([]Register, 9),
+		R:   make([]*bitslice, 9),
 		Mem: make([]Word, 4000),
 		ComparisonIndicator: struct {
 			Less, Equal, Greater bool
@@ -145,9 +147,9 @@ func NewMachine() *Arch {
 	}
 	for i := range machine.R {
 		if i == A || i == X {
-			machine.R[i] = Register(&bitslice{0, 0, 5})
+			machine.R[i] = &bitslice{0, 0, 5}
 		} else {
-			machine.R[i] = Register(&bitslice{0, 0, 2})
+			machine.R[i] = &bitslice{0, 0, 2}
 		}
 	}
 	return machine

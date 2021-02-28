@@ -7,6 +7,14 @@ import (
 
 var machine = NewMachine()
 
+func TestInst(t *testing.T) {
+	var inst Word = 0x41234567
+	if inst.a() != -0x48 || inst.i() != 0x34 || inst.f() != 0x54 || inst.c() != 0x27 {
+		t.Error(inst.a(), inst.i(), inst.f(), inst.c())
+	}
+}
+
+/*
 func TestParseInst(t *testing.T) {
 	tests := []struct {
 		Line   string
@@ -38,48 +46,54 @@ func TestParseInst(t *testing.T) {
 		}
 	}
 }
+*/
 
 // TestLD tests load and load negative instructions.
 func TestLD(t *testing.T) {
 	tests := []struct {
-		Line string
-		RegI int
-		Want MIXBytes
+		Inst, Want Word
+		RegI       int
 	}{
 		{
-			Line: "LDA 2000",
+			Inst: composeInst(2000, 0, 5, C_LD), // LDA 2000
 			RegI: A,
-			Want: MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5},
+			//Want: 0x41083105, // NEG_SIGN, 1, 2, 3, 4, 5
+			Want: composeWord(1, 1, 2, 3, 4, 5),
 		},
 		{
-			Line: "LDA 2000(0:3)",
+			//Line: "LDA 2000(0:3)",
+			Inst: composeInst(2000, 0, 3, C_LD), // LDA 2000(0:3)
 			RegI: A,
-			Want: MIXBytes{NEG_SIGN, 0, 0, 1, 2, 3},
+			//Want: 0x40001083, // NEG_SIGN, 0, 0, 1, 2, 3
+			Want: composeWord(1, 0, 0, 1, 2, 3),
 		},
 		{
-			Line: "LDA 2000,4(4:5)", // has no effect as of now since rI_ are all zeros
+			Inst: composeInst(2000, 4, 37, C_LD), // LDA 2000,4(4:5), but index has no effect here
 			RegI: A,
-			Want: MIXBytes{POS_SIGN, 0, 0, 0, 4, 5},
+			//Want: 0x00000105, // POS_SIGN, 0, 0, 0, 4, 5
+			Want: composeWord(0, 0, 0, 0, 4, 5),
 		},
-		// NewWord with: list of size > 6, values greater than 63 -> separately test
 		{
-			Line: "LD1 2000", // ignores bytes 1-3, book says undefined if set to nonzero #
+			//Line: "LD1 2000", // ignores bytes 1-3, book says undefined if set to nonzero #
+			Inst: composeInst(2000, 0, 5, C_LD+I1),
 			RegI: I1,
-			Want: MIXBytes{NEG_SIGN, 4, 5},
+			//Want: 0x50140000, // NEG_SIGN, 4, 5
+			Want: composeWord(1, 4, 5, 0, 0, 0),
 		},
 		{
-			Line: "LDAN 2000",
+			Inst: composeInst(2000, 0, 5, C_LDN),
 			RegI: A,
-			Want: MIXBytes{POS_SIGN, 1, 2, 3, 4, 5},
+			Want: composeWord(0, 1, 2, 3, 4, 5),
 		},
 	}
 	for _, test := range tests {
-		inst, err := ParseInst(test.Line)
+		/*inst, err := ParseInst(test.Line)
 		if err != nil {
 			t.Errorf("Error parsing %s: %v", test.Line, err)
-		}
-		copy(machine.R[test.RegI], NewWord())                       // resets register
-		copy(machine.Cell(inst), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
+		}*/
+		// Want a way to generate insts with A, I, F, C
+		copy(machine.R[test.RegI], 0)        // resets register
+		copy(machine.Cell(inst), 0x41083105) // default cell
 		machine.Exec(inst)
 		result := machine.R[test.RegI].Raw()
 		if !test.Want.Equals(result) {
@@ -88,6 +102,7 @@ func TestLD(t *testing.T) {
 	}
 }
 
+/*
 // TestST tests store instructions.
 func TestST(t *testing.T) {
 	tests := []struct {
@@ -168,7 +183,7 @@ func TestArithmetic(t *testing.T) {
 		t.Error("N/A")
 	}
 }
-*/
+
 func TestAddressTransfer(t *testing.T) {
 	t.Error("N/A")
 }
@@ -204,3 +219,4 @@ func TestIO(t *testing.T) {
 func TestConversion(t *testing.T) {
 	t.Error("N/A")
 }
+*/

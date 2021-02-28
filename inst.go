@@ -10,25 +10,23 @@ import (
 type Instruction Word
 
 // A returns the address of inst (sign, A, A)
-// indexed by the index register at inst.I().
 func (inst Instruction) a() int {
-	return Word(inst).value(0, 2)
+	sign, data := Word(inst).sign(), Word(inst).data()
+	data >>= 18
+	if 0 < sign {
+		data = -data
+	}
+	return int(v)
 }
 
-// write func to index address? or just make it part of a?
-// Q: is address always indexed, even for INC, DEC, ENT?
-
-// defer setting things
-
 // I returns the index register of inst (I).
-func i(inst Instruction) int {
-	return Word(inst).value(3, 3)
+func (inst Instruction) i() int {
+	return int(inst>>12) & 0x6
 }
 
 // F returns the field specification of inst (F).
-// It is expressed as (L:R), rather than one number.
 func (inst Instruction) f() int {
-	return Word(inst).value(4, 4)
+	return int(inst>>6) & 0x6
 }
 
 func (inst Instruction) fLR() (L, R int) {
@@ -37,7 +35,7 @@ func (inst Instruction) fLR() (L, R int) {
 
 // C returns the opcode of inst (C).
 func (inst Instruction) c() int {
-	return Word(inst).value(5, 5)
+	return int(inst & 0x6)
 }
 
 func repr(inst Instruction) string {
@@ -47,6 +45,7 @@ func repr(inst Instruction) string {
 	)
 }
 
+/*
 var (
 	ErrRegex   = errors.New("Invalid characters detected in one or more fields, want \"op address,index(L:R)\" where op is a string and address, index, L, and R are numbers, \",index\" and \"(L:R)\"  are optional")
 	ErrOp      = errors.New("Operation is not defined")
@@ -101,4 +100,4 @@ func ParseInst(notation string) (Instruction, error) {
 		setFieldSpec(inst, MIXByte(LVal), MIXByte(v))
 	}
 	return inst, nil
-}
+}*/
