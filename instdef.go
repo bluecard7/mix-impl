@@ -8,7 +8,7 @@ const (
 	C_ST  = 24
 )
 
-func (m *Arch) Exec(inst instruction) {
+func (m *Arch) Exec(inst Instruction) {
 	switch c := inst.c(); true {
 	case c == C_ADD:
 		m.Add(inst)
@@ -21,18 +21,16 @@ func (m *Arch) Exec(inst instruction) {
 	}
 }
 
-func (m *Arch) Add(inst instruction) *Snapshot {
-	data := m.Cell(inst).Slice(FieldSpec(inst))
+func (m *Arch) Add(inst Instruction) *Snapshot {
+	data := m.Cell(inst.a()).Slice(inst.f())
 	if Code(inst) == 2 {
-		data = data.Negate()
+		data = data.negate()
 	}
-	sum, overflowed := m.R[A].Raw().Add(data)
-	m.OverflowToggle = overflowed
-	copy(m.R[A], sum)
+	m.R[A], m.OverflowToggle = Word(m.R[A]).Add(data)
 
-	snapshot := new(Snapshot)
-	snapshot.includesR(A, m.R[A])
-	return snapshot
+	return new(Snapshot)
+	//snapshot.includesR(A, m.R[A])
+	//return snapshot
 }
 
 // func (inst *Add) Duration() int    { return 2 }
@@ -121,24 +119,30 @@ func (inst *Move) Duration() int {
 	}
 }*/
 func (m *Arch) Load(inst instruction) *Snapshot {
-	rI := inst.C() - C_LD
-	data := m.Cell(inst.A())
-	if C_LDN <= inst.C() {
-		rI := inst.C() - C_LDN
-		data = data.Negate()
+	rI := inst.c() - C_LD
+	data := m.Cell(inst.a())
+	if C_LDN <= inst.c() {
+		rI = inst.c() - C_LDN
+		data = data.negate()
 	}
-	s := data.Slice(inst.F())
-	dst := m.R[rI]
-	copy(dst.Raw().Sign(), s.Sign())
-	amtToCpy := len(s.Data())
-	if len(dst)-1 < amtToCpy {
-		amtToCpy = len(dst) - 1
-	}
-	copy(dst[len(dst)-amtToCpy:], s.Data()[len(s.Data())-amtToCpy:])
+	L, R := inst.fLR
+	s := data.slice(L, R)
+	tmp := m.R[rI]
 
-	snapshot := new(Snapshot)
-	snapshot.includesR(int(rI), dst)
-	return snapshot
+	// s is either positive bc L != 0 or data's sign
+	if tmp.sign() != s.sign() {
+		tmp.negate()
+	}
+	amtToCpy := R - L + 1
+	if m.rLen(rI) < amtToCpy {
+		amtToCpy = m.rLen(rI)
+	}
+	// copy(dst[len(dst)-amtToCpy:], s.Data()[len(s.Data())-amtToCpy:])
+	//bitCopy({tmp, m.rLen(rI) - amtToCpy, m.rLen(rI)}, {s, s.len()-amtToCpy, s.len()})
+
+	return new(Snapshot)
+	//snapshot.includesR(int(rI), dst)
+	//return snapshot
 }
 
 //func (inst *Load) Duration() int { return 2 }
@@ -154,28 +158,33 @@ func (m *Arch) Load(inst instruction) *Snapshot {
 	return st
 }*/
 func (m *Arch) Store(inst instruction) *Snapshot {
-	rI := inst.C() - C_ST
-	if inst.C() == 32 {
+	var rI int
+	switch inst.c() {
+	case 32:
 		rI = J
-	}
-	if inst.C() == 33 {
+	case 33:
 		rI = A
+	default:
+		rI = inst.c() - C_ST
 	}
 
-	src := m.R[rI]
+	tmp := 0
 	switch true {
-	case I1 <= rI && rI <= I6:
-		src = append(Register{src[0], 0, 0, 0}, src[1:]...)
-	case inst.C() == 33:
-		src = Register(NewWord())
+	case I1 <= rI && rI <= I6: // need to structure index reg like this
+		//src = append(Register{src[0], 0, 0, 0}, src[1:]...)
+	case inst.c() < 33:
+		tmp = m.R[rI]
 	}
-	L, R := inst.F()
-	cell := m.Cell(inst.A())
-	if L == 0 {
-		copy(cell.Sign(), src.Raw().Sign())
+	L, R := inst.fLR()
+	cell := m.Cell(inst.a())
+	if L == 0 && tmp.sign() != cell.sign() {
+		tmp.negate()
 		L = 1
 	}
-	copy(cell[L:R+1], src[len(src)-int(R-L+1):])
+	//copy(cell[L:R+1], src[len(src)-int(R-L+1):])
+	// cleaner if using pointer for cell?
+	//bitCopy({cell, L, R+1}, {tmp, tmp.len()-R-L+1, tmp.len()})
+
 	snapshot := new(Snapshot)
 	snapshot.includesCell(int(toNum(inst.A())), cell)
 	return snapshot
