@@ -1,14 +1,14 @@
 package main
 
 import (
-	"errors"
+	//	"errors"
 	"testing"
 )
 
 var machine = NewMachine()
 
 func TestInst(t *testing.T) {
-	var inst Word = 0x41234567
+	var inst Instruction = 0x41234567
 	if inst.a() != -0x48 || inst.i() != 0x34 || inst.f() != 0x54 || inst.c() != 0x27 {
 		t.Error(inst.a(), inst.i(), inst.f(), inst.c())
 	}
@@ -51,8 +51,9 @@ func TestParseInst(t *testing.T) {
 // TestLD tests load and load negative instructions.
 func TestLD(t *testing.T) {
 	tests := []struct {
-		Inst, Want Word
-		RegI       int
+		Inst Instruction
+		Want Word
+		RegI int
 	}{
 		{
 			Inst: composeInst(2000, 0, 5, C_LD), // LDA 2000
@@ -92,12 +93,13 @@ func TestLD(t *testing.T) {
 			t.Errorf("Error parsing %s: %v", test.Line, err)
 		}*/
 		// Want a way to generate insts with A, I, F, C
-		copy(machine.R[test.RegI], 0)        // resets register
-		copy(machine.Cell(inst), 0x41083105) // default cell
+		inst := test.Inst
+		machine.R[test.RegI].copy(Word(0).slice(0, 5)) // resets register
+		machine.Write(inst.a(), 0x41083105)            // default cell
 		machine.Exec(inst)
-		result := machine.R[test.RegI].Raw()
-		if !test.Want.Equals(result) {
-			t.Errorf("Incorrect result for %s: want %v, got %v", test.Line, test.Want, result)
+		result := machine.R[test.RegI].word
+		if test.Want != result {
+			t.Errorf("Incorrect result: want %v, got %v", test.Want, result)
 		}
 	}
 }

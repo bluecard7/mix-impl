@@ -1,15 +1,15 @@
 package main
 
 import (
-	"regexp"
+//"regexp"
 )
 
-func regIndex(regName string) MIXByte {
+func regIndex(regName string) int {
 	// each character is in ascii range, so b will be a byte.
 	// register index constants organized in the same order as string.
 	for rI, b := range "A123456X" {
 		if regName == string(b) {
-			return MIXByte(rI)
+			return rI
 		}
 	}
 	return NoR
@@ -30,19 +30,21 @@ func regIndex(regName string) MIXByte {
 }*/
 
 // sign
-func composeInst(a, i, f, c int) Instruction {
-	sign := 0 // positive
+func composeInst(a, i, f, c int32) Instruction {
+	sign := int32(0) // positive
 	if a < 0 {
 		a = -a
 		sign = 1
 	}
-	return sign<<30 | a<<18 | (i&63)<<12 | (f&63)<<6 | (c & 63)
+	return Instruction(sign<<30 | a<<18 | (i&63)<<12 | (f&63)<<6 | (c & 63))
 }
 
-var patternToTemplate = map[string]func(rI MIXByte) Instruction{
-	`^LD([A1-6X])$`:  func(rI MIXByte) Instruction { return newInst(C_LD + rI) },  // LD_
-	`^LD([A1-6X])N$`: func(rI MIXByte) Instruction { return newInst(C_LDN + rI) }, // LD_N
-	`^ST([A1-6X])$`:  func(rI MIXByte) Instruction { return newInst(C_ST + rI) },  // ST_
+//CMP[A1-6X] : 56-63
+
+var patternToTemplate = map[string]func(rI int) Instruction{
+	`^LD([A1-6X])$`:  func(rI int) Instruction { return composeInst(0, 0, 5, int32(C_LD+rI)) },  // LD_
+	`^LD([A1-6X])N$`: func(rI int) Instruction { return composeInst(0, 0, 5, int32(C_LDN+rI)) }, // LD_N
+	`^ST([A1-6X])$`:  func(rI int) Instruction { return composeInst(0, 0, 5, int32(C_ST+rI)) },  // ST_
 	/*`^J([A1-6X])N$`:  func(rI MIXByte) Instruction { return newJmp(0, 40+rI, rI) },             // J_N
 	`^J([A1-6X])Z$`:  func(rI MIXByte) Instruction { return newJmp(1, 40+rI, rI) },             // J_Z
 	`^J([A1-6X])P$`:  func(rI MIXByte) Instruction { return newJmp(2, 40+rI, rI) },             // J_P
@@ -58,12 +60,12 @@ var patternToTemplate = map[string]func(rI MIXByte) Instruction{
 }
 
 var nameToTemplate = map[string]func() Instruction{
-	"ADD": func() Instruction { return newInst(0, 0, 5, 1) },
-	"SUB": func() Instruction { return newInst(0, 0) },
+	"ADD": func() Instruction { return composeInst(0, 0, 5, 1) },
+	"SUB": func() Instruction { return composeInst(0, 0, 5, 2) },
 	// "MUL"
 	// "DIV"
-	"STJ": func() Instruction { return newST(32, J) },
-	"STZ": func() Instruction { return newST(33, A) },
+	"STJ": func() Instruction { return composeInst(0, 0, 2, 32) },
+	"STZ": func() Instruction { return composeInst(0, 0, 5, 33) },
 
 	/*"JMP":  func() Instruction { return newJmp(0, 39, NoR) },
 	"JSJ":  func() Instruction { return newJmp(1, 39, NoR) },

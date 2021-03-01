@@ -1,6 +1,6 @@
 package main
 
-type MIXDevice []MIXBytes // slice of MIX words
+type MIXDevice []Word
 type MIXDevices []MIXDevice
 
 const (
@@ -34,11 +34,7 @@ const (
 // readiness
 func peripherals() MIXDevices {
 	newDevice := func(blockSize int) MIXDevice {
-		device := make(MIXDevice, blockSize)
-		for i := range device {
-			device[i] = NewWord()
-		}
-		return device
+		return make(MIXDevice, blockSize)
 	}
 
 	devices := make(MIXDevices, 20)

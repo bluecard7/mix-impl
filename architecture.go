@@ -7,11 +7,10 @@ const (
 
 type Word int32
 type bitslice struct {
-	word       Word
-	start, end int // change to byte
+	word, start, end Word // Not really safe cause weird if negative
 }
 
-func composeWord(sign, b1, b2, b3, b4, b5 byte) Word {
+func composeWord(sign, b1, b2, b3, b4, b5 Word) Word {
 	return (sign&1)<<30 | (b1&63)<<24 | (b2&63)<<18 | (b3&63)<<12 | (b4&63)<<6 | (b5 & 63)
 }
 
@@ -31,7 +30,7 @@ func (left Word) add(right Word) (sum Word, overflowed bool) {
 	return left + right, left < left+right
 }
 
-func bitmask(L, R int) (mask Word) {
+func bitmask(L, R Word) (mask Word) {
 	if L == 0 {
 		mask = 1 << 30
 		L = 1
@@ -46,7 +45,7 @@ func bitmask(L, R int) (mask Word) {
 
 // slice returns the Word in [L:R].
 // positive if sign isn't included in the slice.
-func (w Word) slice(L, R int) (s *bitslice) {
+func (w Word) slice(L, R Word) (s *bitslice) {
 	w &= bitmask(L, R)
 	return &bitslice{w, L, R}
 }
@@ -60,14 +59,14 @@ func (s *bitslice) value() (v int) {
 	return v
 }
 
-func (s *bitslice) len() int {
+func (s *bitslice) len() Word {
 	if s.start == 0 {
 		return s.end - s.start
 	}
 	return s.end - s.start + 1
 }
 
-func (s1 *bitslice) distance(s2 *bitslice) int {
+func (s1 *bitslice) distance(s2 *bitslice) Word {
 	s1Start, s2Start := s1.start, s2.start
 	if s1Start == 0 {
 		s1Start = 1
@@ -111,19 +110,19 @@ const (
 type Arch struct {
 	R                   []*bitslice
 	Mem                 []Word
-	PC                  int // program counter
+	PC                  Word // program counter
 	OverflowToggle      bool
 	ComparisonIndicator struct {
 		Less, Equal, Greater bool
 	}
 }
 
-func (m *Arch) Read(address int) Word {
-	return m.Mem[address]
+func (m *Arch) Read(address Word) Word {
+	return m.Mem[address.slice(0, 5).value()]
 }
 
-func (m *Arch) Write(address int, data Word) {
-	m.Mem[address] = data
+func (m *Arch) Write(address, data Word) {
+	m.Mem[address.slice(0, 5).value()] = data
 }
 
 func (m *Arch) SetComparisons(lt, eq, gt bool) {

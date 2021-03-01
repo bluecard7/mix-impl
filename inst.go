@@ -1,47 +1,45 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"regexp"
-	"strconv"
 )
 
 type Instruction Word
 
 // A returns the address of inst (sign, A, A)
-func (inst Instruction) a() int {
+func (inst Instruction) a() Word {
 	sign, data := Word(inst).sign(), Word(inst).data()
 	data >>= 18
 	if 0 < sign {
 		data = -data
 	}
-	return int(v)
+	return data
 }
 
 // I returns the index register of inst (I).
-func (inst Instruction) i() int {
-	return int(inst>>12) & 0x6
+func (inst Instruction) i() Word {
+	return Word(inst>>12) & 63
 }
 
 // F returns the field specification of inst (F).
-func (inst Instruction) f() int {
-	return int(inst>>6) & 0x6
+func (inst Instruction) f() Word {
+	return Word(inst>>6) & 63
 }
 
-func (inst Instruction) fLR() (L, R int) {
-	return int(inst.f() / 8), inst.f() % 8
+func (inst Instruction) fLR() (L, R Word) {
+	return Word(inst.f() / 8), inst.f() % 8
 }
 
 // C returns the opcode of inst (C).
-func (inst Instruction) c() int {
-	return int(inst & 0x6)
+func (inst Instruction) c() Word {
+	return Word(inst & 63)
 }
 
 func repr(inst Instruction) string {
+	L, R := inst.fLR()
 	return fmt.Sprintf(
 		"Address: %v\nIndex: %v\nFieldSpec: [%d:%d]\nOpCode: %v",
-		Address(inst), Index(inst), inst.fLR(), Code(inst),
+		inst.a(), inst.i(), L, R, inst.c(),
 	)
 }
 
