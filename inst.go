@@ -4,11 +4,9 @@ import (
 	"fmt"
 )
 
-type Instruction Word
-
 // A returns the address of inst (sign, A, A)
-func (inst Instruction) a() Word {
-	sign, data := Word(inst).sign(), Word(inst).data()
+func (inst Word) a() Word {
+	sign, data := inst.sign(), inst.data()
 	data >>= 18
 	if 0 < sign {
 		data = -data
@@ -17,25 +15,25 @@ func (inst Instruction) a() Word {
 }
 
 // I returns the index register of inst (I).
-func (inst Instruction) i() Word {
-	return Word(inst>>12) & 63
+func (inst Word) i() Word {
+	return inst >> 12 & 63
 }
 
 // F returns the field specification of inst (F).
-func (inst Instruction) f() Word {
-	return Word(inst>>6) & 63
+func (inst Word) f() Word {
+	return inst >> 6 & 63
 }
 
-func (inst Instruction) fLR() (L, R Word) {
-	return Word(inst.f() / 8), inst.f() % 8
+func (inst Word) fLR() (L, R Word) {
+	return inst.f() / 8, inst.f() % 8
 }
 
 // C returns the opcode of inst (C).
-func (inst Instruction) c() Word {
-	return Word(inst & 63)
+func (inst Word) c() Word {
+	return inst & 63
 }
 
-func repr(inst Instruction) string {
+func repr(inst Word) string {
 	L, R := inst.fLR()
 	return fmt.Sprintf(
 		"Address: %v\nIndex: %v\nFieldSpec: [%d:%d]\nOpCode: %v",

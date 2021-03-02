@@ -10,7 +10,7 @@ const (
 	C_CMP           = 56
 )
 
-func (m *Arch) Exec(inst Instruction) {
+func (m *Arch) Exec(inst Word) {
 	switch c := inst.c(); true {
 	case c == C_ADD:
 		m.Add(inst)
@@ -25,7 +25,7 @@ func (m *Arch) Exec(inst Instruction) {
 	}
 }
 
-func (m *Arch) Add(inst Instruction) {
+func (m *Arch) Add(inst Word) {
 	data := m.Read(inst.a()).slice(inst.fLR()).word
 	if inst.c() == 2 {
 		data = data.negate()
@@ -43,7 +43,7 @@ func newConv(R MIXByte) *Convert {
 
 //func newShift(R MIXByte) *Shift {
 //	return &Shift{defaultFields(0, R, 6)}
-/*func (m *Arch) Shift(inst Instruction) {
+/*func (m *Arch) Shift(inst Word) {
 	buf, size := int64(m.R[A].word.data()), 5
 	_, R := inst.fLR()
 	if 1 < R { // shifts rA + rX (data only, not signs)
@@ -98,7 +98,7 @@ func (inst *Move) Effect(m *MIXArch) *Snapshot {
 	return snapshot
 }*/
 
-func (m *Arch) Load(inst Instruction) {
+func (m *Arch) Load(inst Word) {
 	rI := inst.c() - C_LD
 	data := m.Read(inst.a())
 	if C_LDN <= inst.c() {
@@ -123,7 +123,7 @@ func (m *Arch) Load(inst Instruction) {
 	}
 	return st
 }*/
-func (m *Arch) Store(inst Instruction) {
+func (m *Arch) Store(inst Word) {
 	var rI Word
 	switch inst.c() {
 	case 32:
@@ -181,7 +181,7 @@ func (inst *IO) Effect(m *MIXArch) *Snapshot {
 	return new(Snapshot)
 }*/
 
-func (m *Arch) Jump(inst Instruction) {
+func (m *Arch) Jump(inst Word) {
 	_, R := inst.fLR()
 	c, address := inst.c(), inst.a()
 
@@ -244,7 +244,7 @@ func (m *Arch) Jump(inst Instruction) {
 }
 
 //func newAddressTransfer(R, c, rI MIXByte) *AddressTransfer {
-func (m *Arch) AddressTransfer(inst Instruction) {
+func (m *Arch) AddressTransfer(inst Word) {
 	rI := inst.c() - C_ADDR_TRANSFER
 	_, R := inst.fLR()
 	address := inst.a()
@@ -261,7 +261,7 @@ func (m *Arch) AddressTransfer(inst Instruction) {
 	}
 }
 
-func (m *Arch) Compare(inst Instruction) {
+func (m *Arch) Compare(inst Word) {
 	rI := inst.c() - C_CMP
 	L, R := inst.fLR()
 	regSlice := m.R[rI].word.slice(L, R)
