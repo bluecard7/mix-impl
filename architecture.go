@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 const (
 	WORDSIZE = 5
 	BYTESIZE = 6
@@ -16,6 +18,17 @@ func composeWord(b1, b2, b3, b4, b5 Word) (w Word) {
 	return w
 }
 
+func (w Word) view() string {
+	sign, data := "+", w.data()
+	if w < 0 {
+		sign = "-"
+	}
+	return fmt.Sprintf(
+		"\n%s %v %v %v %v %v", 
+		sign, data>>24, data>>18&63, data>>12&63, data>>6&63, data&63,
+	)
+}
+
 func (w Word) sign() Word {
 	if w < 0 {
 		return -1
@@ -26,7 +39,7 @@ func (w Word) sign() Word {
 func (w Word) data() (v Word) {
 	v = w
 	if w < 0 {
-		v = -w
+		v = -v
 	}
 	return v & 0x3FFFFFFF // last 30 bits used as data, 6 bits/Byte
 }
@@ -35,6 +48,7 @@ func (left Word) add(right Word) (sum Word, overflowed bool) {
 	return left + right, left < left+right
 }
 
+// really only bitmask for data
 func bitmask(L, R Word) (mask Word) {
 	if L == 0 {
 		L = 1
@@ -56,17 +70,20 @@ func (w Word) slice(L, R Word) (s *bitslice) {
 		v *= w.sign()
 		L = 1
 	}
-	return &bitslice{w, R - L + 1}
+	return &bitslice{v, R - L + 1}
 }
 
 func (dst *bitslice) copy(src *bitslice) {
-	srcWord, copyAmt := src.w, dst.len
-	if src.len < dst.len {
-		copyAmt = src.len
+	srcData, copyAmt := src.w.data(), src.len
+	if dst.len < copyAmt {
+		copyAmt = dst.len
 	}
-	mask := bitmask(WORDSIZE-compyAmt+1, WORDSIZE)
-	dst.w &= mask ^ 0x7FFFFFFF // zero out portion to be written to
-	dst.w |= srcWord & mask
+	mask := bitmask(WORDSIZE-copyAmt+1, WORDSIZE)
+	// how to deal with sign? Don't know if it's included in src slice
+	// Or is this like load?
+	// Or does copy just deal with data, like how bitmask is just data?
+	data := dst.w.data() & (mask ^ 0x7FFFFFFF) | (srcData & mask)
+	dst.w = data * src.w.sign()
 }
 
 const (

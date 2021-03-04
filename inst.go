@@ -6,9 +6,9 @@ import (
 
 // A returns the address of inst (sign, A, A)
 func (inst Word) a() Word {
-	sign, data := inst.sign(), inst.data()
+	data := inst.data()
 	data >>= 18
-	if 0 < sign {
+	if inst < 0 {
 		data = -data
 	}
 	return data
@@ -16,12 +16,12 @@ func (inst Word) a() Word {
 
 // I returns the index register of inst (I).
 func (inst Word) i() Word {
-	return inst >> 12 & 63
+	return inst.data() >> 12 & 63
 }
 
 // F returns the field specification of inst (F).
 func (inst Word) f() Word {
-	return inst >> 6 & 63
+	return inst.data() >> 6 & 63
 }
 
 func (inst Word) fLR() (L, R Word) {
@@ -30,13 +30,18 @@ func (inst Word) fLR() (L, R Word) {
 
 // C returns the opcode of inst (C).
 func (inst Word) c() Word {
-	return inst & 63
+	return inst.data() & 63
 }
 
-func repr(inst Word) string {
+// args assumed positive
+func composeInst(a, i, f, c Word) Word {
+	return Word(a&4095<<18 | i&63<<12 | f&63<<6 | c&63)
+}
+
+func (inst Word) instView() string {
 	L, R := inst.fLR()
 	return fmt.Sprintf(
-		"Address: %v\nIndex: %v\nFieldSpec: [%d:%d]\nOpCode: %v",
+		"Address: %v\nIndex: %v\nFieldSpec: [%d:%d]\nOpCode: %v\n",
 		inst.a(), inst.i(), L, R, inst.c(),
 	)
 }

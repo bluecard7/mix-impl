@@ -26,11 +26,11 @@ func (m *Arch) Exec(inst Word) {
 }
 
 func (m *Arch) Add(inst Word) {
-	data := m.Read(inst.a()).slice(inst.fLR()).word
+	data := m.Read(inst.a()).slice(inst.fLR()).w
 	if inst.c() == 2 {
-		data = data.negate()
+		data = -data
 	}
-	m.R[A].word, m.OverflowToggle = m.R[A].word.add(data)
+	m.R[A].w, m.OverflowToggle = m.R[A].w.add(data)
 }
 
 /*type Convert struct {
@@ -44,11 +44,11 @@ func newConv(R MIXByte) *Convert {
 //func newShift(R MIXByte) *Shift {
 //	return &Shift{defaultFields(0, R, 6)}
 /*func (m *Arch) Shift(inst Word) {
-	buf, size := int64(m.R[A].word.data()), 5
+	buf, size := int64(m.R[A].w.data()), 5
 	_, R := inst.fLR()
 	if 1 < R { // shifts rA + rX (data only, not signs)
-		// keep sign gap in word?
-		buf = (buf << 32) | m.R[X].word.data()
+		// keep sign gap in.w?
+		buf = (buf << 32) | m.R[X].w.data()
 		size += 5
 	}
 	var (
@@ -99,15 +99,13 @@ func (inst *Move) Effect(m *MIXArch) *Snapshot {
 }*/
 
 func (m *Arch) Load(inst Word) {
-	rI := inst.c() - C_LD
-	data := m.Read(inst.a())
+	rI, data := inst.c() - C_LD, m.Read(inst.a())
 	if C_LDN <= inst.c() {
-		rI = inst.c() - C_LDN
-		data = data.negate()
+		rI, data = inst.c() - C_LDN, -data
 	}
 	regSlice := m.R[rI]
-	if regSlice.word.sign() != data.sign() { // s is either positive bc L != 0 or data's sign
-		regSlice.word.negate()
+	if regSlice.w.sign() != data.sign() { // s is either positive bc L != 0 or data's sign
+		regSlice.w *= -1
 	}
 	regSlice.copy(data.slice(inst.fLR()))
 	// above should've changed m.R[rI]
@@ -136,7 +134,7 @@ func (m *Arch) Store(inst Word) {
 	var regSlice *bitslice
 	switch true {
 	case I1 <= rI && rI <= I6:
-		regWord := m.R[rI].word
+		regWord := m.R[rI].w
 		regWord = regWord.sign() | regWord.data()>>18
 		regSlice = regWord.slice(0, 5)
 	case inst.c() < 33:
@@ -147,7 +145,7 @@ func (m *Arch) Store(inst Word) {
 	cellSlice := m.Read(inst.a()).slice(inst.fLR())
 	// is sign accounted for?
 	cellSlice.copy(regSlice)
-	m.Write(inst.a(), cellSlice.word)
+	m.Write(inst.a(), cellSlice.w)
 }
 
 /*type IO struct {
@@ -188,10 +186,10 @@ func (m *Arch) Jump(inst Word) {
 	// comparison flags and values are gathered
 	// here to avoid repeating later.
 	lt, eq, gt := m.Comparisons()
-	var v int
+	var v Word
 	if 39 < inst.c() {
 		rI := inst.c() - 40
-		v = m.R[rI].value()
+		v = m.R[rI].w
 	}
 
 	// Jumping seems to consist of writing to
@@ -249,12 +247,12 @@ func (m *Arch) AddressTransfer(inst Word) {
 	_, R := inst.fLR()
 	address := inst.a()
 	if R%2 == 1 { // DEC, ENN
-		address = address.negate()
+		address = -address
 	}
 	dst := m.R[rI]
 	if R < 2 { // INC, DEC
 		// but is the slice state stable/correct?
-		dst.word, m.OverflowToggle = dst.word.add(address)
+		dst.w, m.OverflowToggle = dst.w.add(address)
 	} else { // ENT, ENN
 		// does this work for I1-I6, J?
 		dst.copy(Word(address).slice(0, 5))
@@ -264,8 +262,7 @@ func (m *Arch) AddressTransfer(inst Word) {
 func (m *Arch) Compare(inst Word) {
 	rI := inst.c() - C_CMP
 	L, R := inst.fLR()
-	regSlice := m.R[rI].word.slice(L, R)
-	cellSlice := m.Read(inst.a()).slice(L, R)
-	regVal, cellVal := regSlice.value(), cellSlice.value()
+	regVal := m.R[rI].w.slice(L, R).w
+	cellVal := m.Read(inst.a()).slice(L, R).w
 	m.SetComparisons(regVal < cellVal, regVal == cellVal, regVal > cellVal)
 }

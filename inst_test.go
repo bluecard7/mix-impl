@@ -8,8 +8,8 @@ import (
 var machine = NewMachine()
 
 func TestInst(t *testing.T) {
-	var inst Instruction = 0x41234567
-	if inst.a() != -0x48 || inst.i() != 0x34 || inst.f() != 0x54 || inst.c() != 0x27 {
+	var inst Word = -composeInst(1000, 2, 3, 4)
+	if inst.a() != -1000 || inst.i() != 2 || inst.f() != 3 || inst.c() != 4 {
 		t.Error(inst.a(), inst.i(), inst.f(), inst.c())
 	}
 }
@@ -51,55 +51,44 @@ func TestParseInst(t *testing.T) {
 // TestLD tests load and load negative instructions.
 func TestLD(t *testing.T) {
 	tests := []struct {
-		Inst Instruction
-		Want Word
+		Inst, Want Word
 		RegI int
 	}{
 		{
 			Inst: composeInst(2000, 0, 5, C_LD), // LDA 2000
 			RegI: A,
-			//Want: 0x41083105, // NEG_SIGN, 1, 2, 3, 4, 5
-			Want: composeWord(1, 1, 2, 3, 4, 5),
+			Want: -composeWord(1, 2, 3, 4, 5),
 		},
 		{
-			//Line: "LDA 2000(0:3)",
 			Inst: composeInst(2000, 0, 3, C_LD), // LDA 2000(0:3)
 			RegI: A,
-			//Want: 0x40001083, // NEG_SIGN, 0, 0, 1, 2, 3
-			Want: composeWord(1, 0, 0, 1, 2, 3),
+			Want: -composeWord(0, 0, 1, 2, 3),
 		},
 		{
 			Inst: composeInst(2000, 4, 37, C_LD), // LDA 2000,4(4:5), but index has no effect here
 			RegI: A,
-			//Want: 0x00000105, // POS_SIGN, 0, 0, 0, 4, 5
-			Want: composeWord(0, 0, 0, 0, 4, 5),
+			Want: composeWord(0, 0, 0, 4, 5),
 		},
 		{
 			//Line: "LD1 2000", // ignores bytes 1-3, book says undefined if set to nonzero #
 			Inst: composeInst(2000, 0, 5, C_LD+I1),
 			RegI: I1,
-			//Want: 0x50140000, // NEG_SIGN, 4, 5
-			Want: composeWord(1, 4, 5, 0, 0, 0),
+			Want: -composeWord(0, 0, 0, 4, 5),
 		},
 		{
 			Inst: composeInst(2000, 0, 5, C_LDN),
 			RegI: A,
-			Want: composeWord(0, 1, 2, 3, 4, 5),
+			Want: composeWord(1, 2, 3, 4, 5),
 		},
 	}
 	for _, test := range tests {
-		/*inst, err := ParseInst(test.Line)
-		if err != nil {
-			t.Errorf("Error parsing %s: %v", test.Line, err)
-		}*/
-		// Want a way to generate insts with A, I, F, C
 		inst := test.Inst
-		machine.R[test.RegI].copy(Word(0).slice(0, 5)) // resets register
-		machine.Write(inst.a(), 0x41083105)            // default cell
+		machine.R[test.RegI].w = 0 // resets register
+		machine.Write(inst.a(), -composeWord(1, 2, 3, 4, 5))
 		machine.Exec(inst)
-		result := machine.R[test.RegI].word
+		result := machine.R[test.RegI].w
 		if test.Want != result {
-			t.Errorf("Incorrect result: want %v, got %v", test.Want, result)
+			t.Errorf("Want:%sGot%s", test.Want.view(), result.view())
 		}
 	}
 }

@@ -4,18 +4,18 @@ import (
 //"regexp"
 )
 
-func regIndex(regName string) int {
+func regIndex(regName string) Word {
 	// each character is in ascii range, so b will be a byte.
 	// register index constants organized in the same order as string.
 	for rI, b := range "A123456X" {
 		if regName == string(b) {
-			return rI
+			return Word(rI)
 		}
 	}
 	return NoR
 }
 
-/*func newInst(instName string) Instruction {
+/*func newInst(instName string) Word {
 	if template, ok := nameToTemplate[instName]; ok {
 		return template()
 	}
@@ -29,52 +29,41 @@ func regIndex(regName string) int {
 	return nil
 }*/
 
-// sign
-func composeInst(a, i, f, c int32) Instruction {
-	sign := int32(0) // positive
-	if a < 0 {
-		a = -a
-		sign = 1
-	}
-	return Instruction(sign<<30 | a<<18 | (i&63)<<12 | (f&63)<<6 | (c & 63))
-}
-
 //CMP[A1-6X] : 56-63
-
-var patternToTemplate = map[string]func(rI int) Instruction{
-	`^LD([A1-6X])$`:  func(rI int) Instruction { return composeInst(0, 0, 5, int32(C_LD+rI)) },  // LD_
-	`^LD([A1-6X])N$`: func(rI int) Instruction { return composeInst(0, 0, 5, int32(C_LDN+rI)) }, // LD_N
-	`^ST([A1-6X])$`:  func(rI int) Instruction { return composeInst(0, 0, 5, int32(C_ST+rI)) },  // ST_
-	/*`^J([A1-6X])N$`:  func(rI MIXByte) Instruction { return newJmp(0, 40+rI, rI) },             // J_N
-	`^J([A1-6X])Z$`:  func(rI MIXByte) Instruction { return newJmp(1, 40+rI, rI) },             // J_Z
-	`^J([A1-6X])P$`:  func(rI MIXByte) Instruction { return newJmp(2, 40+rI, rI) },             // J_P
-	`^J([A1-6X])NN$`: func(rI MIXByte) Instruction { return newJmp(3, 40+rI, rI) },             // J_NN
-	`^J([A1-6X])NZ$`: func(rI MIXByte) Instruction { return newJmp(4, 40+rI, rI) },             // J_NZ
-	`^J([A1-6X])NP$`: func(rI MIXByte) Instruction { return newJmp(5, 40+rI, rI) },             // J_NP
-	`^INC([A1-6X])$`: func(rI MIXByte) Instruction { return newAddressTransfer(0, 48+rI, rI) }, // INC_
-	`^DEC([A1-6X])$`: func(rI MIXByte) Instruction { return newAddressTransfer(1, 48+rI, rI) }, // DEC_
-	`^ENT([A1-6X])$`: func(rI MIXByte) Instruction { return newAddressTransfer(2, 48+rI, rI) }, // ENT_
-	`^ENN([A1-6X])$`: func(rI MIXByte) Instruction { return newAddressTransfer(3, 48+rI, rI) }, // ENN_
-	`^CMP([A1-6X])$`: func(rI MIXByte) Instruction { return newCmp(56+rI, rI) },                //CMP_
+var patternToTemplate = map[string]func(rI Word) Word{
+	`^LD([A1-6X])$`:  func(rI Word) Word { return composeInst(0, 0, 5, C_LD+rI) },  // LD_
+	`^LD([A1-6X])N$`: func(rI Word) Word { return composeInst(0, 0, 5, C_LDN+rI) }, // LD_N
+	`^ST([A1-6X])$`:  func(rI Word) Word { return composeInst(0, 0, 5, C_ST+rI) },  // ST_
+	/*`^J([A1-6X])N$`:  func(rI MIXByte) Word { return newJmp(0, 40+rI, rI) },             // J_N
+	`^J([A1-6X])Z$`:  func(rI MIXByte) Word { return newJmp(1, 40+rI, rI) },             // J_Z
+	`^J([A1-6X])P$`:  func(rI MIXByte) Word { return newJmp(2, 40+rI, rI) },             // J_P
+	`^J([A1-6X])NN$`: func(rI MIXByte) Word { return newJmp(3, 40+rI, rI) },             // J_NN
+	`^J([A1-6X])NZ$`: func(rI MIXByte) Word { return newJmp(4, 40+rI, rI) },             // J_NZ
+	`^J([A1-6X])NP$`: func(rI MIXByte) Word { return newJmp(5, 40+rI, rI) },             // J_NP
+	`^INC([A1-6X])$`: func(rI MIXByte) Word { return newAddressTransfer(0, 48+rI, rI) }, // INC_
+	`^DEC([A1-6X])$`: func(rI MIXByte) Word { return newAddressTransfer(1, 48+rI, rI) }, // DEC_
+	`^ENT([A1-6X])$`: func(rI MIXByte) Word { return newAddressTransfer(2, 48+rI, rI) }, // ENT_
+	`^ENN([A1-6X])$`: func(rI MIXByte) Word { return newAddressTransfer(3, 48+rI, rI) }, // ENN_
+	`^CMP([A1-6X])$`: func(rI MIXByte) Word { return newCmp(56+rI, rI) },                //CMP_
 	*/
 }
 
-var nameToTemplate = map[string]func() Instruction{
-	"ADD": func() Instruction { return composeInst(0, 0, 5, 1) },
-	"SUB": func() Instruction { return composeInst(0, 0, 5, 2) },
+var nameToTemplate = map[string]func() Word{
+	"ADD": func() Word { return composeInst(0, 0, 5, 1) },
+	"SUB": func() Word { return composeInst(0, 0, 5, 2) },
 	// "MUL"
 	// "DIV"
-	"STJ": func() Instruction { return composeInst(0, 0, 2, 32) },
-	"STZ": func() Instruction { return composeInst(0, 0, 5, 33) },
+	"STJ": func() Word { return composeInst(0, 0, 2, 32) },
+	"STZ": func() Word { return composeInst(0, 0, 5, 33) },
 
-	/*"JMP":  func() Instruction { return newJmp(0, 39, NoR) },
-	"JSJ":  func() Instruction { return newJmp(1, 39, NoR) },
-	"JOV":  func() Instruction { return newJmp(2, 39, NoR) },
-	"JNOV": func() Instruction { return newJmp(3, 39, NoR) },
-	"JL":   func() Instruction { return newJmp(4, 39, NoR) },
-	"JE":   func() Instruction { return newJmp(5, 39, NoR) },
-	"JG":   func() Instruction { return newJmp(6, 39, NoR) },
-	"JGE":  func() Instruction { return newJmp(7, 39, NoR) },
-	"JNE":  func() Instruction { return newJmp(8, 39, NoR) },
-	"JLE":  func() Instruction { return newJmp(9, 39, NoR) },*/
+	/*"JMP":  func() Word { return newJmp(0, 39, NoR) },
+	"JSJ":  func() Word { return newJmp(1, 39, NoR) },
+	"JOV":  func() Word { return newJmp(2, 39, NoR) },
+	"JNOV": func() Word { return newJmp(3, 39, NoR) },
+	"JL":   func() Word { return newJmp(4, 39, NoR) },
+	"JE":   func() Word { return newJmp(5, 39, NoR) },
+	"JG":   func() Word { return newJmp(6, 39, NoR) },
+	"JGE":  func() Word { return newJmp(7, 39, NoR) },
+	"JNE":  func() Word { return newJmp(8, 39, NoR) },
+	"JLE":  func() Word { return newJmp(9, 39, NoR) },*/
 }
