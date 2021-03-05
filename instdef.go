@@ -3,6 +3,8 @@ package main
 const (
 	C_ADD           = 1
 	C_SUB           = 2
+	C_MUL           = 3
+	C_DIV           = 4
 	C_LD            = 8
 	C_LDN           = 16
 	C_ST            = 24
@@ -16,6 +18,10 @@ func (m *Arch) Exec(inst Word) {
 		m.Add(inst)
 	case c == C_SUB:
 		m.Add(inst)
+	case c == C_MUL:
+
+	case c == C_DIV:
+
 	case C_LD <= c || c < C_ST:
 		m.Load(inst)
 	case C_ST <= c:
@@ -31,6 +37,31 @@ func (m *Arch) Add(inst Word) {
 		data = -data
 	}
 	m.R[A].w, m.OverflowToggle = m.R[A].w.add(data)
+}
+
+func (m *Arch) Mul(inst Word) {
+	v := m.Read(inst.a()).slice(inst.fLR()).w
+	sign, product := 1, int64(m.R[A].w)*int64(v)
+	if product < 0 {
+		sign, product = -1, -product
+	}
+	m.R[A].w = Word(sign * (product >> 30))
+	m.R[X].w = Word(sign * (product & 0x3FFFFFFF))
+}
+
+func (m *Arch) Div(inst Word) {
+	var q, r Word
+	den := int64(m.Read(inst.a()).slice(inst.fLR()).w)
+	if den != 0 {
+		num := int64(m.R[A].w.data())<<30 | int64(m.R[X].w.data())
+		q, r = Word(num/den), Word(num%den)
+	}
+	if den == 0 || q > 2<<31-1 {
+		m.OverflowToggle = true
+		return
+	}
+	m.R[X].w = m.R[A].w.sign() * r
+	m.R[A].w = q
 }
 
 /*type Convert struct {
@@ -99,9 +130,9 @@ func (inst *Move) Effect(m *MIXArch) *Snapshot {
 }*/
 
 func (m *Arch) Load(inst Word) {
-	rI, data := inst.c() - C_LD, m.Read(inst.a())
+	rI, data := inst.c()-C_LD, m.Read(inst.a())
 	if C_LDN <= inst.c() {
-		rI, data = inst.c() - C_LDN, -data
+		rI, data = inst.c()-C_LDN, -data
 	}
 	regSlice := m.R[rI]
 	if regSlice.w.sign() != data.sign() { // s is either positive bc L != 0 or data's sign
@@ -122,30 +153,20 @@ func (m *Arch) Load(inst Word) {
 	return st
 }*/
 func (m *Arch) Store(inst Word) {
-	var rI Word
+	rI := inst.c() - C_ST
 	switch inst.c() {
 	case 32:
 		rI = J
 	case 33:
 		rI = A
-	default:
-		rI = inst.c() - C_ST
 	}
-	var regSlice *bitslice
-	switch true {
-	case I1 <= rI && rI <= I6:
-		regWord := m.R[rI].w
-		regWord = regWord.sign() | regWord.data()>>18
-		regSlice = regWord.slice(0, 5)
-	case inst.c() < 33:
-		regSlice = m.R[rI]
-	default: //STZ
-		regSlice = Word(0).slice(0, 5)
+	regS := m.R[rI].w.slice(0, 5)
+	if inst.c() < 33 {
+		regS = Word(0).slice(0, 5)
 	}
-	cellSlice := m.Read(inst.a()).slice(inst.fLR())
-	// is sign accounted for?
-	cellSlice.copy(regSlice)
-	m.Write(inst.a(), cellSlice.w)
+	cellS := m.Read(inst.a()).slice(inst.fLR())
+	cellS.copy(regS) // is sign accounted for?
+	m.Write(inst.a(), cellS.w)
 }
 
 /*type IO struct {
