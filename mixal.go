@@ -12,24 +12,110 @@ import (
 type Assembler struct {
 	locCounter  int
 	definedSyms map[string]int
-	symRe       *regexp.Regexp
-	numRe       *regexp.Regexp
-	unaryOpRe   *regexp.Regexp
-	binOpRe     *regexp.Regexp
-	literalRe   *regexp.Regexp
 	mixalRe     *regexp.Regexp
 }
 
 func NewAssembler() *Assembler {
 	return &Assembler{
 		definedSyms: make(map[string]int),
-		symRe:       regexp.MustCompile(`[A-Z0-9]{1,10}|[0-9][HFB]`),
-		numRe:       regexp.MustCompile(`[0-9]{1,10}`),
-		unaryOpRe:   regexp.MustCompile(`([+-])(.+)`),
-		binOpRe:     regexp.MustCompile(`(.+)([+-/*:]|//)(.+)`), // don't know if double slash matches here
-		literalRe:   regexp.MustCompile(`=(.+)=`),
 		mixalRe:     regexp.MustCompile(`(.+\s)?(.+)\s(.+)`), // code or
 	}
+}
+
+// should I return Word isntead of int?
+
+const ErrFutureRef = errors.New("symbol: future reference")
+
+// what about local syms?
+func (a *Assembler) symbol(s string) (int, error) {
+	if len(s) == 0 || 10 < len(s) {
+		return 0, errors.New("symbol: 0 or more than 10 characters")
+	}
+	for _, c := range s {
+		if (c < '0' || '9' < c) && (c < 'A' || 'Z' < c) {
+			return 0, errors.New("symbol: contains non-digit or non-capital letter")
+		}
+	}
+	v, known := a.definedSym[s]
+	if !known {
+		return v, ErrFutureRef
+	}
+	return v, nil
+}
+
+func (a *Assembler) number(s string) (int, error) {
+	if len(s) == 0 || 10 < len(s) { // c is unicode, but digits are ascii (1 byte)
+		return 0, errors.New("number: 0 or more than 10 potential digits")
+	}
+	for _, c := range s {
+		if c < '0' || '9' < c {
+			return 0, errors.New("number: contains non-digit")
+		}
+	}
+	v, err := strconv.Atoi(s)
+	return v, err
+}
+
+func (a *Assembler) literal(s string) (int, error) {
+	if len(s) == 0 || 12 < len(s) {
+		return 0, errors.New("literal: len needs to be in [1, 11]")
+	}
+	if s[0] == '=' || s[len(s)-1] == '=' {
+		return 0, errors.New("literal: not wrapped with equal")
+	}
+	// wValue(s[1:len(s)-1])
+}
+
+func (a *Assembler) unaryOp(s string) (int, error) {
+	unaryOp := s[0]
+	if unaryOp == '-' || unaryOp == '+' {
+		v, err := a.atom(s[1:])
+		if err != nil {
+			return 0, err
+		}
+		if unaryOp == "-" {
+			v = -v
+		}
+		return v, nil
+	}
+	return 0, errors.New("unaryOp: not a unary op")
+}
+
+func (a *Assembler) binaryOp(s string) (int, error) {
+	// binOpRe: regexp.MustCompile(`(.+)([+-/*:]|//)(.+)`), // don't know if double slash matches here
+	op, i := "", len(s)-1
+	for op == "" && i > -1 {
+		if c := s[i]; c == '+' || c == '-' || c == '*' || c == ':' || c == '/' {
+			op = string(c)
+		}
+		if op == "/" && 0 < i && s[i-1] == '/' { // checks if op is floor division
+			op, i = "//", i-1
+		}
+		i--
+	}
+	atomVal, atomErr := a.atom(s[i+1+len(op):])
+	if atomErr != nil {
+		return 0, atomErr
+	}
+	exprVal, exprErr := a.expression(s[:i+1])
+	if exprErr != nil {
+		return 0, exprErr
+	}
+	switch op {
+	case "+":
+		return exprVal + atomVal, nil
+	case "-":
+		return exprVal - atomVal, nil
+	case "*":
+		return exprVal * atomVal, nil
+	case "/":
+		return exprVal / atomVal, nil
+	case "//":
+		return int(exprVal / atomVal), nil
+	case ":":
+		return 8*exprVal + atomVal, nil
+	}
+	return 0, errors.New("binaryOp: not an binary operation")
 }
 
 func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
@@ -40,7 +126,7 @@ func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
 		}
 		matches := a.mixalRe.FindStringSubmatch(line.Text())
 		if matches == nil {
-			return nil, errors.New("Line is not mixal")
+			return nil, errors.New("not a mixal line")
 		}
 		sym, op, address := matches[1], matches[2], matches[3]
 		fmt.Println(sym, op, address)
@@ -91,57 +177,29 @@ func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
 
 // does it add to internal instruction slice in assembler?
 func (a *Assembler) atom(s string) (int, error) {
-	switch true {
-	case "*" == s:
+	if "*" == s {
 		return a.locCounter, nil
-	case a.numRe.MatchString(s):
-		return strconv.Atoi(s)
-	case a.symRe.MatchString(s):
-		if v, ok := a.definedSyms[s]; ok {
-			return v, nil
-		}
 	}
-	return 0, errors.New("Not an atom") // more descriptive err? check errors package
+	if v, err := a.number(s); err == nil {
+		return v, nil
+	}
+	if v, err := a.symbol(s); err == nil {
+		return v, nil
+	}
+	return 0, errors.New("atom: not an atom") // more descriptive err? check errors package
 }
 
 func (a *Assembler) expression(s string) (int, error) {
-	// atom
-	if v, err := a.atom(s); err == nil {
+	if v, err := a.atom(s); err == nil { // atom
 		return v, nil
 	}
-	// +atom, -atom
-	if matches := a.unaryOpRe.FindStringSubmatch(s); matches != nil {
-		op, atomStr := matches[1], matches[2]
-		if v, err := a.atom(atomStr); err == nil {
-			if op == "-" {
-				v = -v
-			}
-			return v, nil
-		}
+	if v, err := a.unaryOp(s); err == nil { // +atom, -atom
+		return v, nil
 	}
-	// expression binop atom
-	if matches := a.binOpRe.FindStringSubmatch(s); matches != nil {
-		exprStr, op, atomStr := matches[1], matches[2], matches[3]
-		if v1, err1 := a.atom(atomStr); err1 == nil {
-			if v2, err2 := a.expression(exprStr); err2 == nil {
-				switch op {
-				case "+":
-					return v1 + v2, nil
-				case "-":
-					return v1 - v2, nil
-				case "*":
-					return v1 * v2, nil
-				case "/":
-					return v1 / v2, nil
-				case "//":
-					return int(v1 / v2), nil
-				case ":":
-					return 8*v1 + v2, nil
-				}
-			}
-		}
+	if v, err := a.binaryOp(s); err == nil { // expression binop atom
+		return v, nil
 	}
-	return 0, errors.New("Not an expression")
+	return 0, errors.New("expression: not an expression")
 }
 
 func (a *Assembler) a(s string) (int, error) {
@@ -150,10 +208,9 @@ func (a *Assembler) a(s string) (int, error) {
 		return 0, nil
 	}
 	// future reference
-	if a.symRe.MatchString(s) {
-		if v, ok := a.definedSyms[s]; !ok {
-			return v, nil
-		}
+	if v, err := a.number(s); err == ErrFutureRef {
+		// doesn't really return a value... how to deal with this?
+		return 0, nil
 	}
 	// literal constant
 	if matches := a.literalRe.FindStringSubmatch(s); matches != nil {
@@ -163,7 +220,7 @@ func (a *Assembler) a(s string) (int, error) {
 	if v, err := a.expression(s); err == nil {
 		return v, nil
 	}
-	return 0, errors.New("Not an address")
+	return 0, errors.New("a: not an address")
 }
 
 func (a *Assembler) i(s string) (int, error) {
@@ -171,19 +228,19 @@ func (a *Assembler) i(s string) (int, error) {
 	case s == "":
 		return 0, nil
 	case s[0] == ',':
-		return a.expression(s)
+		return a.expression(s[1:])
 	}
-	return 0, errors.New("Not an index")
+	return 0, errors.New("i: not an index")
 }
 
 func (a *Assembler) f(s string) (int, error) {
 	switch true {
 	case s == "":
-		return 5, nil // really the normal F spec for the op
-	case s[0] == '(' && s[len(s)-1] == ')':
+		return 5, nil // this is wrong, depends on the normal F spec for the op
+	case s[0] == '(' && ')' == s[len(s)-1]:
 		return a.expression(s[1 : len(s)-1])
 	}
-	return 0, errors.New("Not a field spec")
+	return 0, errors.New("f: not a field spec")
 }
 
 func (a *Assembler) wValue() {
