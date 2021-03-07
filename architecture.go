@@ -9,7 +9,7 @@ const (
 
 type Word int32
 type bitslice struct {
-	w, len Word // Not really safe cause weird if negative
+	w, start, len Word // start = actual start (w/ sign), len = length of data
 }
 
 // to negate, just do -composeWord(...)
@@ -64,13 +64,13 @@ func bitmask(L, R Word) (mask Word) {
 // slice returns the Word in [L:R].
 // positive if sign isn't included in the slice.
 func (w Word) slice(L, R Word) (s *bitslice) {
-	v := w.data() & bitmask(L, R)
-	v >>= ((WORDSIZE - R) * BYTESIZE)
+	v := w.data() & bitmask(L, R) >> ((WORDSIZE - R) * BYTESIZE)
+	dataStart := L
 	if L == 0 {
 		v *= w.sign()
-		L = 1
+		dataStart = 1
 	}
-	return &bitslice{v, R - L + 1}
+	return &bitslice{v, L, R - dataStart + 1}
 }
 
 func (dst *bitslice) copy(src *bitslice) {
@@ -79,11 +79,23 @@ func (dst *bitslice) copy(src *bitslice) {
 		copyAmt = dst.len
 	}
 	mask := bitmask(WORDSIZE-copyAmt+1, WORDSIZE)
-	// how to deal with sign? Don't know if it's included in src slice
-	// Or is this like load?
-	// Or does copy just deal with data, like how bitmask is just data?
 	data := dst.w.data()&(mask^0x7FFFFFFF) | (srcData & mask)
-	dst.w = data * src.w.sign()
+	if src.start == 0 {
+		dst.w = data * src.w.sign()
+	} else {
+		dst.w = data * dst.w.sign()
+	}
+}
+
+func (b *bitslice) apply(w Word) Word {
+	sign, L := w.sign(), b.start
+	if L == 0 {
+		sign = b.w.sign()
+		L = 1
+	}
+	shiftAmt := (WORDSIZE - b.len + 1 - L) * BYTESIZE
+	mask, toPos := bitmask(L, L+b.len-1), b.w.data()<<shiftAmt
+	return sign * (w.data()&(mask^0x3FFFFFFF) | toPos)
 }
 
 const (

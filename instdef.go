@@ -24,7 +24,7 @@ func (m *Arch) Exec(inst Word) {
 
 	case C_LD <= c && c < C_ST:
 		m.Load(inst)
-	case C_ST <= c:
+	case C_ST <= c && c < C_CMP:
 		m.Store(inst)
 	case C_CMP <= c:
 		m.Compare(inst)
@@ -150,15 +150,7 @@ func (m *Arch) Store(inst Word) {
 	buf := Word(0).slice(L, R)
 	buf.copy(regS)
 	cell := m.Read(inst.a())
-	newCell := cell.sign()
-	if L == 0 {
-		newCell = regS.w.sign()
-		L = 1
-	}
-	shiftAmt := (WORDSIZE - buf.len + 1 - L) * BYTESIZE
-	toPos := buf.w.data() << shiftAmt // L has to be <= start of slice
-	newCell *= cell.data()&(bitmask(L, R)^0x3FFFFFFF) | toPos
-	m.Write(inst.a(), newCell)
+	m.Write(inst.a(), buf.apply(cell))
 }
 
 /*type IO struct {
