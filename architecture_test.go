@@ -16,8 +16,6 @@ func TestWordBasics(t *testing.T) {
 	}
 }
 
-//func TestAdd
-
 func TestBitslice(t *testing.T) {
 	var w Word = -composeWord(1, 2, 3, 4, 5)
 	s1, s2 := w.slice(0, 2), w.slice(3, 5)

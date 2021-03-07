@@ -19,9 +19,9 @@ func (m *Arch) Exec(inst Word) {
 	case c == C_SUB:
 		m.Add(inst)
 	case c == C_MUL:
-
+		m.Mul(inst)
 	case c == C_DIV:
-
+		m.Div(inst)
 	case C_LD <= c && c < C_ST:
 		m.Load(inst)
 	case C_ST <= c && c < C_CMP:

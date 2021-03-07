@@ -26,7 +26,7 @@ func NewAssembler() *Assembler {
 func isDigit(c rune) bool  { return '0' <= c && c <= '9' }
 func isLetter(c rune) bool { return 'A' <= c && c <= 'Z' }
 func findChar(s string, target byte, from int) (pos int) {
-	for i := from; from < len(s); i++ {
+	for i := from; i < len(s); i++ {
 		if c := s[i]; c == target {
 			return i
 		}
@@ -255,28 +255,26 @@ func (a *Assembler) f(s string) (Word, error) {
 	return 0, errors.New("f: not a field spec")
 }
 
-func (a *Assembler) wValue(s string) (Word, error) {
-	// 1. expression + f(), if f() is empty, means [0, 5]
-	// 2. Expr(Field), Expr(Field), ...
-	var v Word // need to change the word per expr
+func (a *Assembler) wValue(s string) (v Word, err error) {
 	for startExpr := 0; startExpr < len(s); {
 		var endExpr, endF int
 		if endF = findChar(s, ',', startExpr); endF < 0 {
 			endF = len(s)
 		}
-		if endExpr = findChar(s, '(', startExpr); endExpr < 0 {
+		if endExpr = findChar(s, '(', startExpr); endExpr < 0 || endF < endExpr {
 			endExpr = endF // vacuous
 		}
-		_, exprErr := a.expression(s[startExpr:endExpr])
-		if exprErr != nil {
-			return 0, exprErr
+		var exprVal, fVal Word
+		exprVal, err = a.expression(s[startExpr:endExpr])
+		if err != nil {
+			return 0, err
 		}
-		_, fErr := a.f(s[endExpr:endF])
-		if fErr != nil {
-			return 0, fErr
+		fVal, err = a.f(s[endExpr:endF])
+		if err != nil {
+			return 0, err
 		}
-		// L, R := composeInst(0, 0, fVal, 0).fLR()
-		// then "store" exprVal into (L:R) of v
+		L, R := composeInst(0, 0, fVal, 0).fLR()
+		v = v.slice(L, R).copy(exprVal.slice(0, 5)).apply(v)
 		startExpr = endF + 1
 	}
 	return v, nil

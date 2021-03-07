@@ -1,6 +1,5 @@
 package main
 
-/*
 import (
 	"testing"
 )
@@ -20,7 +19,7 @@ func TestAtom(t *testing.T) {
 	for _, test := range tests {
 		v, _ := a.atom(test.Line)
 		if v != test.Want {
-			t.Error(test.Want.view(), v.view())
+			t.Errorf("\nWant:%s\nGot:%s\n", test.Want.view(), v.view())
 		}
 	}
 }
@@ -38,7 +37,7 @@ func TestExpression(t *testing.T) {
 	for _, test := range tests {
 		v, _ := a.expression(test.Line)
 		if v != test.Want {
-			t.Error(test.Want.view(), v.view())
+			t.Errorf("\nWant:%s\nGot:%s\n", test.Want.view(), v.view())
 		}
 	}
 }
@@ -55,7 +54,7 @@ func TestF(t *testing.T) {
 	for _, test := range tests {
 		v, _ := a.f(test.Line)
 		if v != test.Want {
-			t.Error(test.Want.view(), v.view())
+			t.Errorf("\nWant:%s\nGot:%s\n", test.Want.view(), v.view())
 		}
 	}
 }
@@ -68,12 +67,14 @@ func TestWValue(t *testing.T) {
 	}{
 		{"-1000(0:2)", -composeWord(1000>>6&63, 1000&63, 0, 0, 0)},
 		{"-1000", -composeWord(0, 0, 0, 1000>>6&63, 1000&63)},
-		//
+		{"-1000(0:2),1", composeWord(0, 0, 0, 0, 1)},
+		{"1,-1000(0:2)", -composeWord(1000>>6&63, 1000&63, 0, 0, 1)},
 	}
 
 	for _, test := range tests {
-		if v, _ := a.wValue(test.Line); v != test.Want {
-			t.Error(test.Want.view(), v.view())
+		if v, err := a.wValue(test.Line); v != test.Want {
+			t.Errorf("\nWant:%s\nGot:%s\n", test.Want.view(), v.view())
+			t.Error(err)
 		}
 	}
-}*/
+}

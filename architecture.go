@@ -73,7 +73,7 @@ func (w Word) slice(L, R Word) (s *bitslice) {
 	return &bitslice{v, L, R - dataStart + 1}
 }
 
-func (dst *bitslice) copy(src *bitslice) {
+func (dst *bitslice) copy(src *bitslice) *bitslice {
 	srcData, copyAmt := src.w.data(), src.len
 	if dst.len < copyAmt {
 		copyAmt = dst.len
@@ -85,6 +85,7 @@ func (dst *bitslice) copy(src *bitslice) {
 	} else {
 		dst.w = data * dst.w.sign()
 	}
+	return dst
 }
 
 func (b *bitslice) apply(w Word) Word {
