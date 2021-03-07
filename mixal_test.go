@@ -4,7 +4,60 @@ import (
 	"testing"
 )
 
-var asmr = NewAssembler()
+var a = NewAssembler()
+
+func TestAtom(t *testing.T) {
+	tests := []struct {
+		Line string
+		Want Word
+		Err  error
+	}{
+		{Line: "*", Want: 0},
+		{Line: "12345", Want: 12345},
+		{Line: "somesym", Want: 0}, // need to define symbols
+	}
+	for _, test := range tests {
+		v, _ := a.atom(test.Line)
+		if v != test.Want {
+			t.Error(test.Want.view(), v.view())
+		}
+	}
+}
+
+func TestExpression(t *testing.T) {
+	tests := []struct {
+		Line string
+		Want Word
+		Err  error
+	}{
+		{Line: "-12345", Want: -12345},
+		{Line: "123+45", Want: 168},
+		{Line: "1:5", Want: 13},
+	}
+	for _, test := range tests {
+		v, _ := a.expression(test.Line)
+		if v != test.Want {
+			t.Error(test.Want.view(), v.view())
+		}
+	}
+}
+
+func TestF(t *testing.T) {
+	tests := []struct {
+		Line string
+		Want Word
+		Err  error
+	}{
+		{Line: "", Want: 5},
+		{Line: "(1:5)", Want: 13},
+	}
+	for _, test := range tests {
+		v, _ := a.f(test.Line)
+		if v != test.Want {
+			t.Error(test.Want.view(), v.view())
+		}
+	}
+}
 
 func TestWValue(t *testing.T) {
 	// Test once (w/ or w/o F)
@@ -18,8 +71,8 @@ func TestWValue(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if v, err := asmr.wValue(test.Line); v != test.Want {
-			t.Error(v.view(), test.Want.view())
+		if v, _ := a.wValue(test.Line); v != test.Want {
+			t.Error(test.Want.view(), v.view())
 		}
 	}
 }

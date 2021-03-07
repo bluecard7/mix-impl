@@ -127,6 +127,7 @@ func (a *Assembler) binaryOp(s string) (Word, error) {
 	return 0, errors.New("binaryOp: not an binary operation")
 }
 
+// include *Arch as arg
 func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
 	line := bufio.NewScanner(src)
 	for line.Scan() {
@@ -145,12 +146,14 @@ func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			a.definedSyms[sym] = v
+			a.definedSyms[sym] = v // refer to comment below
 		case "ORIG":
-			if v, err := a.symbol(sym); err == nil {
-				a.definedSyms[sym] = a.locCounter
-			} else {
-				return nil, err
+			if sym != "" { // can I just assign to "" safely?
+				_, err := a.symbol(sym)
+				if err != ErrFutureRef {
+					return nil, err
+				}
+				a.definedSyms[syms] = a.locCounter
 			}
 			v, err := a.wValue(address)
 			if err != nil {
@@ -212,21 +215,17 @@ func (a *Assembler) expression(s string) (Word, error) {
 }
 
 func (a *Assembler) a(s string) (Word, error) {
-	// vacuous
-	if s == "" {
+	if s == "" { // vacuous
 		return 0, nil
 	}
-	// future reference
-	if v, err := a.number(s); err == ErrFutureRef {
+	if v, err := a.number(s); err == ErrFutureRef { // future reference
 		// doesn't really return a value... how to deal with this?
 		return 0, nil
 	}
-	// literal constant
-	if v, err := a.literal(s); err == nil {
+	if v, err := a.literal(s); err == nil { // literal constant
 		// would place in a constant record
 	}
-	// expression
-	if v, err := a.expression(s); err == nil {
+	if v, err := a.expression(s); err == nil { // expression
 		return v, nil
 	}
 	return 0, errors.New("a: not an address")
@@ -274,7 +273,6 @@ func (a *Assembler) wValue(s string) (Word, error) {
 		}
 		startExpr = endF + 1
 	}
-	//
 	return v, nil
 }
 
