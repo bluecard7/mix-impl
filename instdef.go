@@ -22,7 +22,7 @@ func (m *Arch) Exec(inst Word) {
 
 	case c == C_DIV:
 
-	case C_LD <= c || c < C_ST:
+	case C_LD <= c && c < C_ST:
 		m.Load(inst)
 	case C_ST <= c:
 		m.Store(inst)
@@ -139,34 +139,26 @@ func (m *Arch) Load(inst Word) {
 		regSlice.w *= -1
 	}
 	regSlice.copy(data.slice(inst.fLR()))
-	// above should've changed m.R[rI]
 }
 
-/*func newST(c, rI MIXByte) *Store {
-	st := &Store{
-		fields: defaultFields(0, 5, c),
-		rI:     rI,
-	}
-	if c == 32 {
-		setFieldSpec(st, 0, 2)
-	}
-	return st
-}*/
 func (m *Arch) Store(inst Word) {
-	rI := inst.c() - C_ST
-	switch inst.c() {
-	case 32:
-		rI = J
-	case 33:
-		rI = A
-	}
-	regS := m.R[rI].w.slice(0, 5)
+	regS := Word(0).slice(0, 5) // STZ
 	if inst.c() < 33 {
-		regS = Word(0).slice(0, 5)
+		regS = m.R[inst.c()-C_ST].w.slice(0, 5)
 	}
-	cellS := m.Read(inst.a()).slice(inst.fLR())
-	cellS.copy(regS) // is sign accounted for?
-	m.Write(inst.a(), cellS.w)
+	L, R := inst.fLR()
+	buf := Word(0).slice(L, R)
+	buf.copy(regS)
+	cell := m.Read(inst.a())
+	newCell := cell.sign()
+	if L == 0 {
+		newCell = regS.w.sign()
+		L = 1
+	}
+	shiftAmt := (WORDSIZE - buf.len + 1 - L) * BYTESIZE
+	toPos := buf.w.data() << shiftAmt // L has to be <= start of slice
+	newCell *= cell.data()&(bitmask(L, R)^0x3FFFFFFF) | toPos
+	m.Write(inst.a(), newCell)
 }
 
 /*type IO struct {

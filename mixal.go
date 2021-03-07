@@ -127,8 +127,7 @@ func (a *Assembler) binaryOp(s string) (Word, error) {
 	return 0, errors.New("binaryOp: not an binary operation")
 }
 
-// include *Arch as arg
-func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
+func (a *Assembler) Assemble(m *Arch, src io.Reader) ([]string, error) {
 	line := bufio.NewScanner(src)
 	for line.Scan() {
 		if line.Text()[0] == '*' {
@@ -153,7 +152,7 @@ func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
 				if err != ErrFutureRef {
 					return nil, err
 				}
-				a.definedSyms[syms] = a.locCounter
+				a.definedSyms[sym] = a.locCounter
 			}
 			v, err := a.wValue(address)
 			if err != nil {
@@ -165,7 +164,7 @@ func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			// m.Mem[a.locCounter] = v
+			m.Mem[a.locCounter] = v
 			a.locCounter++
 		case "ALF":
 			// assemble address[:5] as alphanumeric char MIX word
@@ -176,10 +175,10 @@ func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-		// process each recorded constant as CON
-		// also would have something similar for unknown syms
-		// if sym != "" ...
-		// m.Mem[a.locCounter] = v
+			// process each recorded constant as CON
+			// also would have something similar for unknown syms
+			// if sym != "" ...
+			m.Mem[a.locCounter] = v
 		default:
 			// ParseInst logic here
 		}
@@ -218,12 +217,17 @@ func (a *Assembler) a(s string) (Word, error) {
 	if s == "" { // vacuous
 		return 0, nil
 	}
-	if v, err := a.number(s); err == ErrFutureRef { // future reference
-		// doesn't really return a value... how to deal with this?
+	if _, err := a.symbol(s); err == ErrFutureRef { // future reference
+		/*
+			a.futureRefs[s] = append(a.futureRefs[s], v)
+			// would need to somehow hook into the generated inst and change the address
+		*/
 		return 0, nil
 	}
-	if v, err := a.literal(s); err == nil { // literal constant
+	if _, err := a.literal(s); err == nil { // literal constant
 		// would place in a constant record
+		// create internal sym, kind of a future ref too
+		return 0, nil
 	}
 	if v, err := a.expression(s); err == nil { // expression
 		return v, nil
@@ -263,14 +267,16 @@ func (a *Assembler) wValue(s string) (Word, error) {
 		if endExpr = findChar(s, '(', startExpr); endExpr < 0 {
 			endExpr = endF // vacuous
 		}
-		exprVal, exprErr := a.expression(s[startExpr:endExpr])
+		_, exprErr := a.expression(s[startExpr:endExpr])
 		if exprErr != nil {
 			return 0, exprErr
 		}
-		fVal, fErr := a.f(s[endExpr:endF])
+		_, fErr := a.f(s[endExpr:endF])
 		if fErr != nil {
 			return 0, fErr
 		}
+		// L, R := composeInst(0, 0, fVal, 0).fLR()
+		// then "store" exprVal into (L:R) of v
 		startExpr = endF + 1
 	}
 	return v, nil

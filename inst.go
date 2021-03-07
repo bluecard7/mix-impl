@@ -41,7 +41,7 @@ func composeInst(a, i, f, c Word) Word {
 func (inst Word) instView() string {
 	L, R := inst.fLR()
 	return fmt.Sprintf(
-		"Address: %v\nIndex: %v\nFieldSpec: [%d:%d]\nOpCode: %v\n",
+		"Address: %v\nIndex: %v\nFieldSpec: [%d:%d]\nOpCode: %v",
 		inst.a(), inst.i(), L, R, inst.c(),
 	)
 }

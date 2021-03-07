@@ -24,7 +24,7 @@ func (w Word) view() string {
 		sign = "-"
 	}
 	return fmt.Sprintf(
-		"\n%s %v %v %v %v %v", 
+		"%s %v %v %v %v %v",
 		sign, data>>24, data>>18&63, data>>12&63, data>>6&63, data&63,
 	)
 }
@@ -82,7 +82,7 @@ func (dst *bitslice) copy(src *bitslice) {
 	// how to deal with sign? Don't know if it's included in src slice
 	// Or is this like load?
 	// Or does copy just deal with data, like how bitmask is just data?
-	data := dst.w.data() & (mask ^ 0x7FFFFFFF) | (srcData & mask)
+	data := dst.w.data()&(mask^0x7FFFFFFF) | (srcData & mask)
 	dst.w = data * src.w.sign()
 }
 
