@@ -41,7 +41,7 @@ func (m *Arch) Add(inst Word) {
 
 func (m *Arch) Mul(inst Word) {
 	v := m.Read(inst.a()).slice(inst.fLR()).w
-	sign, product := 1, int64(m.R[A].w)*int64(v)
+	sign, product := int64(1), int64(m.R[A].w)*int64(v)
 	if product < 0 {
 		sign, product = -1, -product
 	}
@@ -56,7 +56,7 @@ func (m *Arch) Div(inst Word) {
 		num := int64(m.R[A].w.data())<<30 | int64(m.R[X].w.data())
 		q, r = Word(num/den), Word(num%den)
 	}
-	if den == 0 || q > 2<<31-1 {
+	if den == 0 || q > (1<<31)-1 {
 		m.OverflowToggle = true
 		return
 	}

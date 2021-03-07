@@ -10,70 +10,80 @@ import (
 )
 
 type Assembler struct {
-	locCounter  int
-	definedSyms map[string]int
+	locCounter  Word
+	definedSyms map[string]Word
 	mixalRe     *regexp.Regexp
 }
 
 func NewAssembler() *Assembler {
 	return &Assembler{
-		definedSyms: make(map[string]int),
+		definedSyms: make(map[string]Word),
 		mixalRe:     regexp.MustCompile(`(.+\s)?(.+)\s(.+)`), // code or
 	}
 }
 
-// should I return Word isntead of int?
+// should I return Word isntead of Word?
+func isDigit(c rune) bool  { return '0' <= c && c <= '9' }
+func isLetter(c rune) bool { return 'A' <= c && c <= 'Z' }
+func findChar(s string, target byte, from int) (pos int) {
+	for i := from; from < len(s); i++ {
+		if c := s[i]; c == target {
+			return i
+		}
+	}
+	return -1
+}
 
-const ErrFutureRef = errors.New("symbol: future reference")
+var ErrFutureRef = errors.New("symbol: future reference")
 
 // what about local syms?
-func (a *Assembler) symbol(s string) (int, error) {
+func (a *Assembler) symbol(s string) (Word, error) {
 	if len(s) == 0 || 10 < len(s) {
 		return 0, errors.New("symbol: 0 or more than 10 characters")
 	}
 	for _, c := range s {
-		if (c < '0' || '9' < c) && (c < 'A' || 'Z' < c) {
+		if !isDigit(c) && !isLetter(c) {
 			return 0, errors.New("symbol: contains non-digit or non-capital letter")
 		}
 	}
-	v, known := a.definedSym[s]
+	v, known := a.definedSyms[s]
 	if !known {
 		return v, ErrFutureRef
 	}
 	return v, nil
 }
 
-func (a *Assembler) number(s string) (int, error) {
+func (a *Assembler) number(s string) (Word, error) {
 	if len(s) == 0 || 10 < len(s) { // c is unicode, but digits are ascii (1 byte)
 		return 0, errors.New("number: 0 or more than 10 potential digits")
 	}
 	for _, c := range s {
-		if c < '0' || '9' < c {
+		if !isDigit(c) {
 			return 0, errors.New("number: contains non-digit")
 		}
 	}
 	v, err := strconv.Atoi(s)
-	return v, err
+	return Word(v), err
 }
 
-func (a *Assembler) literal(s string) (int, error) {
+func (a *Assembler) literal(s string) (Word, error) {
 	if len(s) == 0 || 12 < len(s) {
 		return 0, errors.New("literal: len needs to be in [1, 11]")
 	}
 	if s[0] == '=' || s[len(s)-1] == '=' {
 		return 0, errors.New("literal: not wrapped with equal")
 	}
-	// wValue(s[1:len(s)-1])
+	return a.wValue(s[1 : len(s)-1])
 }
 
-func (a *Assembler) unaryOp(s string) (int, error) {
+func (a *Assembler) unaryOp(s string) (Word, error) {
 	unaryOp := s[0]
 	if unaryOp == '-' || unaryOp == '+' {
 		v, err := a.atom(s[1:])
 		if err != nil {
 			return 0, err
 		}
-		if unaryOp == "-" {
+		if unaryOp == '-' {
 			v = -v
 		}
 		return v, nil
@@ -81,8 +91,7 @@ func (a *Assembler) unaryOp(s string) (int, error) {
 	return 0, errors.New("unaryOp: not a unary op")
 }
 
-func (a *Assembler) binaryOp(s string) (int, error) {
-	// binOpRe: regexp.MustCompile(`(.+)([+-/*:]|//)(.+)`), // don't know if double slash matches here
+func (a *Assembler) binaryOp(s string) (Word, error) {
 	op, i := "", len(s)-1
 	for op == "" && i > -1 {
 		if c := s[i]; c == '+' || c == '-' || c == '*' || c == ':' || c == '/' {
@@ -111,7 +120,7 @@ func (a *Assembler) binaryOp(s string) (int, error) {
 	case "/":
 		return exprVal / atomVal, nil
 	case "//":
-		return int(exprVal / atomVal), nil
+		return Word(exprVal / atomVal), nil
 	case ":":
 		return 8*exprVal + atomVal, nil
 	}
@@ -132,24 +141,24 @@ func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
 		fmt.Println(sym, op, address)
 		switch op {
 		case "EQU":
-			v, err := wValue(address)
+			v, err := a.wValue(address)
 			if err != nil {
 				return nil, err
 			}
 			a.definedSyms[sym] = v
 		case "ORIG":
-			if _, know := a.definedSym[sym]; sym != "" && !know {
-				a.definedSym[sym] = a.locCounter
+			if v, err := a.symbol(sym); err == nil {
+				a.definedSyms[sym] = a.locCounter
 			} else {
 				return nil, err
 			}
-			v, err := wValue(address)
+			v, err := a.wValue(address)
 			if err != nil {
 				return nil, err
 			}
 			a.locCounter = v
 		case "CON":
-			v, err := wValue(address)
+			v, err := a.wValue(address)
 			if err != nil {
 				return nil, err
 			}
@@ -160,7 +169,7 @@ func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
 			// m.Mem[a.locCounter] = v
 			a.locCounter++
 		case "END":
-			v, err := wValue(address)
+			v, err := a.wValue(address)
 			if err != nil {
 				return nil, err
 			}
@@ -175,8 +184,8 @@ func (a *Assembler) Assemble(src io.Reader) ([]string, error) {
 	return nil, line.Err()
 }
 
-// does it add to internal instruction slice in assembler?
-func (a *Assembler) atom(s string) (int, error) {
+// does it add to Wordernal instruction slice in assembler?
+func (a *Assembler) atom(s string) (Word, error) {
 	if "*" == s {
 		return a.locCounter, nil
 	}
@@ -189,7 +198,7 @@ func (a *Assembler) atom(s string) (int, error) {
 	return 0, errors.New("atom: not an atom") // more descriptive err? check errors package
 }
 
-func (a *Assembler) expression(s string) (int, error) {
+func (a *Assembler) expression(s string) (Word, error) {
 	if v, err := a.atom(s); err == nil { // atom
 		return v, nil
 	}
@@ -202,7 +211,7 @@ func (a *Assembler) expression(s string) (int, error) {
 	return 0, errors.New("expression: not an expression")
 }
 
-func (a *Assembler) a(s string) (int, error) {
+func (a *Assembler) a(s string) (Word, error) {
 	// vacuous
 	if s == "" {
 		return 0, nil
@@ -213,7 +222,7 @@ func (a *Assembler) a(s string) (int, error) {
 		return 0, nil
 	}
 	// literal constant
-	if matches := a.literalRe.FindStringSubmatch(s); matches != nil {
+	if v, err := a.literal(s); err == nil {
 		// would place in a constant record
 	}
 	// expression
@@ -223,7 +232,7 @@ func (a *Assembler) a(s string) (int, error) {
 	return 0, errors.New("a: not an address")
 }
 
-func (a *Assembler) i(s string) (int, error) {
+func (a *Assembler) i(s string) (Word, error) {
 	switch true {
 	case s == "":
 		return 0, nil
@@ -233,7 +242,7 @@ func (a *Assembler) i(s string) (int, error) {
 	return 0, errors.New("i: not an index")
 }
 
-func (a *Assembler) f(s string) (int, error) {
+func (a *Assembler) f(s string) (Word, error) {
 	switch true {
 	case s == "":
 		return 5, nil // this is wrong, depends on the normal F spec for the op
@@ -243,13 +252,30 @@ func (a *Assembler) f(s string) (int, error) {
 	return 0, errors.New("f: not a field spec")
 }
 
-func (a *Assembler) wValue() {
+func (a *Assembler) wValue(s string) (Word, error) {
 	// 1. expression + f(), if f() is empty, means [0, 5]
 	// 2. Expr(Field), Expr(Field), ...
-	// w := Word(0)
-	// e, err := expression(Expr)
-	// if err != nil {...}
-	// w.slice(f).copy(e.slice(0, 5))... basically ST W(f) with e
+	var v Word // need to change the word per expr
+	for startExpr := 0; startExpr < len(s); {
+		var endExpr, endF int
+		if endF = findChar(s, ',', startExpr); endF < 0 {
+			endF = len(s)
+		}
+		if endExpr = findChar(s, '(', startExpr); endExpr < 0 {
+			endExpr = endF // vacuous
+		}
+		exprVal, exprErr := a.expression(s[startExpr:endExpr])
+		if exprErr != nil {
+			return 0, exprErr
+		}
+		fVal, fErr := a.f(s[endExpr:endF])
+		if fErr != nil {
+			return 0, fErr
+		}
+		startExpr = endF + 1
+	}
+	//
+	return v, nil
 }
 
 /*
@@ -279,14 +305,14 @@ func ParseInst(notation string) (Instruction, error) {
 		return nil, ErrOp
 	}
 	var (
-		v   int64
+		v   Word64
 		err error
 	)
 	v, err = strconv.ParseInt(address, 10, 16)
 	if err != nil {
 		return nil, ErrAddress
 	}
-	setAddress(inst, toMIXBytes(int(v), 2))
+	setAddress(inst, toMIXBytes(Word(v), 2))
 	if index != "" {
 		v, err = strconv.ParseInt(index, 10, 8)
 		if err != nil || v < 0 || 6 < v {
