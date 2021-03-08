@@ -1,7 +1,9 @@
 package main
 
+/*
 import (
 	"bufio"
+	"fmt"
 	"os"
 )
 
@@ -20,3 +22,4 @@ func Shell() {
 		// if halt, ok := inst.(Halt); ok { return }
 	}
 }
+*/

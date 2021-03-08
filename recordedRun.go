@@ -1,15 +1,16 @@
 package main
 
+/*
 import (
 	"bufio"
 	"io"
 )
 
-/*
+
 	Keep track of state with each "tick"
 	either as a diff b/n 2 consecutive states (less mem, would need to compute)
 	or just a snapshot (more mem, just save)
-*/
+
 
 // Keeps track of registers, memory, and devices
 // affected by an instruction.
@@ -19,7 +20,7 @@ import (
 // that order.
 type Snapshot struct {
 	RI, MemI, DeviceI []int
-	Data              MIXBytes
+	Data              Word
 }
 
 // Maybe a better approach would be to pair a label
@@ -72,3 +73,4 @@ func Run(m *MIXArch, src io.Reader) (History, error) {
 	}
 	return history, nil
 }
+*/

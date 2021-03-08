@@ -1,124 +1,102 @@
 package main
 
-type MIXByte byte
-type MIXBytes []MIXByte
-
-// NewByte returns a MIXByte with the value of the given data.
-// Since a byte in MIX needs to hold at least 64 distinct values,
-// data must be in the range [0, 63].
-// If data is negative or > 63, then it will be treated as 0.
-func NewByte(data MIXByte) MIXByte {
-	if data < 0 || 63 < data {
-		data = 0
-	}
-	return MIXByte(data)
-}
+import "fmt"
 
 const (
-	POS_SIGN MIXByte = 0
-	NEG_SIGN         = 1
-
-	WORD_SIZE = 6
+	WORDSIZE = 5
+	BYTESIZE = 6
 )
 
-func (b MIXBytes) Sign() MIXBytes {
-	return b[:1]
+type Word int32
+type bitslice struct {
+	w, start, len Word // start = actual start (w/ sign), len = length of data
 }
 
-func (b MIXBytes) Data() MIXBytes {
-	return b[1:]
+// to negate, just do -composeWord(...)
+func composeWord(b1, b2, b3, b4, b5 Word) (w Word) {
+	w = (b1&63)<<24 | (b2&63)<<18 | (b3&63)<<12 | (b4&63)<<6 | (b5 & 63)
+	return w
 }
 
-// Slice returns the MIXBytes in [L:R].
-// A sign is added if it isn't included in the slice.
-func (b MIXBytes) Slice(L, R MIXByte) (s MIXBytes) {
-	s = b[L : R+1]
-	if 0 < L {
-		s = append(MIXBytes{POS_SIGN}, s...)
+func (w Word) view() string {
+	sign, data := "+", w.data()
+	if w < 0 {
+		sign = "-"
 	}
-	return s
+	return fmt.Sprintf(
+		"%s %v %v %v %v %v",
+		sign, data>>24, data>>18&63, data>>12&63, data>>6&63, data&63,
+	)
 }
 
-// Negate takes b and treats the MIXByte at index 0 as a sign.
-// It returns a copy with the opposite sign.
-func (b MIXBytes) Negate() (negated MIXBytes) {
-	opposite := POS_SIGN
-	if b[0] == POS_SIGN {
-		opposite = NEG_SIGN
+func (w Word) sign() Word {
+	if w < 0 {
+		return -1
 	}
-	return append(MIXBytes{opposite}, b.Data()...)
+	return 1
 }
 
-// Creates MIXBytes of specified size, fills with zeros if
-// b is smaller than size
-//func (b MIXBytes) Padded(size int) MIXBytes {
-//}
-
-// Equals method for slice of MIXBytes
-func (left MIXBytes) Equals(right MIXBytes) bool {
-	if len(left) != len(right) {
-		return false
+func (w Word) data() (v Word) {
+	v = w
+	if w < 0 {
+		v = -v
 	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
+	return v & 0x3FFFFFFF // last 30 bits used as data, 6 bits/Byte
 }
 
-func (left MIXBytes) Add(right MIXBytes) (MIXBytes, bool) {
-	var overflowed bool
-	sum := toNum(left) + toNum(right)
-	if sum > 2<<31-1 {
-		overflowed = true
-	}
-	return toMIXBytes(sum, 5), overflowed
+func (left Word) add(right Word) (sum Word, overflowed bool) {
+	return left + right, left < left+right
 }
 
-// NewWord returns MIXBytes(len 6) holding the given data.
-// The given sequence (data) will be interpreted as: the sign, then MIX bytes 1, 2, ..., 5.
-// If more values are given, they are ignored.
-// The given values will be subject to the conditions stated in NewByte, as
-// each byte in data is converted into a MIXByte through NewByte.
-func NewWord(data ...MIXByte) MIXBytes {
-	word := make(MIXBytes, 6)
-	for i, datum := range data {
-		if 6 < i {
-			break
-		}
-		word[i] = NewByte(datum)
+// really only bitmask for data
+func bitmask(L, R Word) (mask Word) {
+	if L == 0 {
+		L = 1
 	}
-	return word
+	var bytePos Word = 0x3F << ((WORDSIZE - R) * BYTESIZE)
+	for i := R; L <= i; i-- {
+		mask |= bytePos
+		bytePos <<= BYTESIZE
+	}
+	return mask
 }
 
-// toNum returns the numeric value of a group of continguous MIX bytes.
-// The first MIX byte will be interpreted as a sign (positive or negative).
-// (max value is 2^31-1)
-func toNum(mixBytes MIXBytes) (value int) {
-	for i := 1; i < len(mixBytes); i++ {
-		value <<= 6
-		value += int(mixBytes[i] & 63)
+// slice returns the Word in [L:R].
+// positive if sign isn't included in the slice.
+func (w Word) slice(L, R Word) (s *bitslice) {
+	v := w.data() & bitmask(L, R) >> ((WORDSIZE - R) * BYTESIZE)
+	dataStart := L
+	if L == 0 {
+		v *= w.sign()
+		dataStart = 1
 	}
-	if mixBytes[0] == NEG_SIGN {
-		value = -value
-	}
-	return value
+	return &bitslice{v, L, R - dataStart + 1}
 }
 
-// toMIXBytes converts the given value to a slice of MIX bytes with len size.
-// The value will be truncated if it exceeds the allowed capacity.
-func toMIXBytes(value, size int) MIXBytes {
-	mixBytes := make(MIXBytes, size+1)
-	if value < 0 {
-		mixBytes[0] = NEG_SIGN
-		value = -value
+func (dst *bitslice) copy(src *bitslice) *bitslice {
+	srcData, copyAmt := src.w.data(), src.len
+	if dst.len < copyAmt {
+		copyAmt = dst.len
 	}
-	for i := len(mixBytes) - 1; i > 0 && value > 0; i-- {
-		mixBytes[i] = NewByte(MIXByte(value & 63))
-		value >>= 6
+	mask := bitmask(WORDSIZE-copyAmt+1, WORDSIZE)
+	data := dst.w.data()&(mask^0x7FFFFFFF) | (srcData & mask)
+	if src.start == 0 {
+		dst.w = data * src.w.sign()
+	} else {
+		dst.w = data * dst.w.sign()
 	}
-	return mixBytes
+	return dst
+}
+
+func (b *bitslice) apply(w Word) Word {
+	sign, L := w.sign(), b.start
+	if L == 0 {
+		sign = b.w.sign()
+		L = 1
+	}
+	shiftAmt := (WORDSIZE - b.len + 1 - L) * BYTESIZE
+	mask, toPos := bitmask(L, L+b.len-1), b.w.data()<<shiftAmt
+	return sign * (w.data()&(mask^0x3FFFFFFF) | toPos)
 }
 
 const (
@@ -134,75 +112,50 @@ const (
 	NoR // No register
 )
 
-// Registers use the index 0 as sign and the rest for data
-type Register MIXBytes
-
-func (r Register) Sign() MIXBytes {
-	return r.Raw().Sign()
-}
-
-func (r Register) Data() MIXBytes {
-	return r.Raw().Data()
-}
-
-func (r Register) Raw() MIXBytes {
-	return MIXBytes(r)
-}
-
-// MIXArch defines the hardware/architecture elements of the MIX machine
-type MIXArch struct {
-	R                   []Register
-	Mem                 []MIXBytes
-	PC                  int // program counter
+// Arch defines the hardware/architecture elements of the  machine
+type Arch struct {
+	R                   []*bitslice
+	Mem                 []Word
+	PC                  Word // program counter
 	OverflowToggle      bool
 	ComparisonIndicator struct {
 		Less, Equal, Greater bool
 	}
 }
 
-// Cell returns the MIX word at the memory cell at address, indexed by I register.
-func (m *MIXArch) Cell(inst Instruction) MIXBytes {
-	address, index := toNum(Address(inst)), Index(inst)
-	if 0 < index {
-		address += toNum(m.R[I1+int(index)-1].Raw())
-	}
-	return machine.Mem[address]
+func (m *Arch) Read(address Word) Word {
+	return m.Mem[address]
 }
 
-func (m *MIXArch) Exec(inst Instruction) *Snapshot {
-	return inst.Effect(m)
+func (m *Arch) Write(address, data Word) {
+	m.Mem[address] = data
 }
 
-func (m *MIXArch) SetComparisons(lt, eq, gt bool) {
+func (m *Arch) SetComparisons(lt, eq, gt bool) {
 	m.ComparisonIndicator.Less = lt
 	m.ComparisonIndicator.Equal = eq
 	m.ComparisonIndicator.Greater = gt
 }
 
-func (m *MIXArch) Comparisons() (bool, bool, bool) {
+func (m *Arch) Comparisons() (bool, bool, bool) {
 	return m.ComparisonIndicator.Less, m.ComparisonIndicator.Equal, m.ComparisonIndicator.Greater
 }
 
-// NewMachine creates a new instance of MIXArch
-func NewMachine() *MIXArch {
-	machine := &MIXArch{
-		R:   make([]Register, 9),
-		Mem: make([]MIXBytes, 4000),
+// NewMachine creates a new instance of Arch
+func NewMachine() *Arch {
+	machine := &Arch{
+		R:   make([]*bitslice, 9),
+		Mem: make([]Word, 4000),
 		ComparisonIndicator: struct {
 			Less, Equal, Greater bool
 		}{},
 	}
-	machine.R[A] = make(Register, 6)
-	machine.R[X] = make(Register, 6)
-	machine.R[I1] = make(Register, 3)
-	machine.R[I2] = make(Register, 3)
-	machine.R[I3] = make(Register, 3)
-	machine.R[I4] = make(Register, 3)
-	machine.R[I5] = make(Register, 3)
-	machine.R[I6] = make(Register, 3)
-	machine.R[J] = make(Register, 3)
-	for i := range machine.Mem {
-		machine.Mem[i] = NewWord()
+	for i := range machine.R {
+		if i == A || i == X {
+			machine.R[i] = Word(0).slice(0, 5)
+		} else {
+			machine.R[i] = Word(0).slice(0, 2)
+		}
 	}
 	return machine
 }

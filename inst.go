@@ -1,66 +1,52 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"regexp"
-	"strconv"
 )
 
-// defaultFields returns a MIX word that represents the default information
-// format. The defaults are no address, no index register, and the given field range
-// and op code c.
-func defaultFields(L, R, c MIXByte) MIXBytes {
-	f := 8*L + R
-	return NewWord(POS_SIGN, 0, 0, 0, f, c)
-}
-
 // A returns the address of inst (sign, A, A)
-// indexed by the index register at inst.I().
-func Address(inst Instruction) MIXBytes {
-	// index := machine.R[I1+int(I(inst))-1].Raw() // probably do this when reading a cell in machine
-	return inst.Fields()[:3]
-}
-
-func setAddress(inst Instruction, newA MIXBytes) {
-	if len(newA) == 3 {
-		copy(inst.Fields(), newA)
+func (inst Word) a() Word {
+	data := inst.data()
+	data >>= 18
+	if inst < 0 {
+		data = -data
 	}
+	return data
 }
 
 // I returns the index register of inst (I).
-func Index(inst Instruction) MIXByte {
-	return inst.Fields()[3]
-}
-
-func setIndex(inst Instruction, newI MIXByte) {
-	inst.Fields()[3] = newI
+func (inst Word) i() Word {
+	return inst.data() >> 12 & 63
 }
 
 // F returns the field specification of inst (F).
-// It is expressed as (L:R), rather than one number.
-func FieldSpec(inst Instruction, newF ...MIXByte) (L, R MIXByte) {
-	f := inst.Fields()[4]
-	return f / 8, f % 8
+func (inst Word) f() Word {
+	return inst.data() >> 6 & 63
 }
 
-func setFieldSpec(inst Instruction, L, R MIXByte) {
-	inst.Fields()[4] = 8*L + R
+func (inst Word) fLR() (L, R Word) {
+	return inst.f() / 8, inst.f() % 8
 }
 
 // C returns the opcode of inst (C).
-func Code(inst Instruction) MIXByte {
-	return inst.Fields()[5]
+func (inst Word) c() Word {
+	return inst.data() & 63
 }
 
-func repr(inst Instruction) string {
-	L, R := FieldSpec(inst)
+// args assumed positive
+func composeInst(a, i, f, c Word) Word {
+	return Word(a&4095<<18 | i&63<<12 | f&63<<6 | c&63)
+}
+
+func (inst Word) instView() string {
+	L, R := inst.fLR()
 	return fmt.Sprintf(
 		"Address: %v\nIndex: %v\nFieldSpec: [%d:%d]\nOpCode: %v",
-		Address(inst), Index(inst), L, R, Code(inst),
+		inst.a(), inst.i(), L, R, inst.c(),
 	)
 }
 
+/*
 var (
 	ErrRegex   = errors.New("Invalid characters detected in one or more fields, want \"op address,index(L:R)\" where op is a string and address, index, L, and R are numbers, \",index\" and \"(L:R)\"  are optional")
 	ErrOp      = errors.New("Operation is not defined")
@@ -115,4 +101,4 @@ func ParseInst(notation string) (Instruction, error) {
 		setFieldSpec(inst, MIXByte(LVal), MIXByte(v))
 	}
 	return inst, nil
-}
+}*/

@@ -1,12 +1,20 @@
 package main
 
 import (
-	"errors"
+	//	"errors"
 	"testing"
 )
 
 var machine = NewMachine()
 
+func TestInst(t *testing.T) {
+	var inst Word = -composeInst(1000, 2, 3, 4)
+	if inst.a() != -1000 || inst.i() != 2 || inst.f() != 3 || inst.c() != 4 {
+		t.Error(inst.a(), inst.i(), inst.f(), inst.c())
+	}
+}
+
+/*
 func TestParseInst(t *testing.T) {
 	tests := []struct {
 		Line   string
@@ -38,112 +46,97 @@ func TestParseInst(t *testing.T) {
 		}
 	}
 }
+*/
 
 // TestLD tests load and load negative instructions.
 func TestLD(t *testing.T) {
 	tests := []struct {
-		Line string
-		RegI int
-		Want MIXBytes
+		Inst, Want Word
+		RegI       int
 	}{
 		{
-			Line: "LDA 2000",
+			Inst: composeInst(2000, 0, 5, C_LD), // LDA 2000
 			RegI: A,
-			Want: MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5},
+			Want: -composeWord(1, 2, 3, 4, 5),
 		},
 		{
-			Line: "LDA 2000(0:3)",
+			Inst: composeInst(2000, 0, 3, C_LD), // LDA 2000(0:3)
 			RegI: A,
-			Want: MIXBytes{NEG_SIGN, 0, 0, 1, 2, 3},
+			Want: -composeWord(0, 0, 1, 2, 3),
 		},
 		{
-			Line: "LDA 2000,4(4:5)", // has no effect as of now since rI_ are all zeros
+			Inst: composeInst(2000, 4, 37, C_LD), // LDA 2000,4(4:5), but index has no effect here
 			RegI: A,
-			Want: MIXBytes{POS_SIGN, 0, 0, 0, 4, 5},
+			Want: composeWord(0, 0, 0, 4, 5),
 		},
-		// NewWord with: list of size > 6, values greater than 63 -> separately test
 		{
-			Line: "LD1 2000", // ignores bytes 1-3, book says undefined if set to nonzero #
+			//Line: "LD1 2000", // ignores bytes 1-3, book says undefined if set to nonzero #
+			Inst: composeInst(2000, 0, 5, C_LD+I1),
 			RegI: I1,
-			Want: MIXBytes{NEG_SIGN, 4, 5},
+			Want: -composeWord(0, 0, 0, 4, 5),
 		},
 		{
-			Line: "LDAN 2000",
+			Inst: composeInst(2000, 0, 5, C_LDN),
 			RegI: A,
-			Want: MIXBytes{POS_SIGN, 1, 2, 3, 4, 5},
+			Want: composeWord(1, 2, 3, 4, 5),
 		},
 	}
 	for _, test := range tests {
-		inst, err := ParseInst(test.Line)
-		if err != nil {
-			t.Errorf("Error parsing %s: %v", test.Line, err)
-		}
-		copy(machine.R[test.RegI], NewWord())                       // resets register
-		copy(machine.Cell(inst), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
+		inst := test.Inst
+		machine.R[test.RegI].w = 0 // resets register
+		machine.Write(inst.a(), -composeWord(1, 2, 3, 4, 5))
 		machine.Exec(inst)
-		result := machine.R[test.RegI].Raw()
-		if !test.Want.Equals(result) {
-			t.Errorf("Incorrect result for %s: want %v, got %v", test.Line, test.Want, result)
+		result := machine.R[test.RegI].w
+		if test.Want != result {
+			t.Errorf("\n%s\n\nWant:%s\nGot%s\n", inst.instView(), test.Want.view(), result.view())
 		}
 	}
+}
+
+type RegState struct {
+	I    int
+	Data Word
 }
 
 // TestST tests store instructions.
 func TestST(t *testing.T) {
 	tests := []struct {
-		Line    string
-		RegI    int
-		RegData MIXBytes // data in register
-		Want    MIXBytes // stored result in cell
+		Reg        RegState // to setup register
+		Inst, Want Word
 	}{
 		{
-			Line:    "STA 2000",
-			RegI:    A,
-			RegData: MIXBytes{POS_SIGN, 6, 7, 8, 9, 0},
-			Want:    MIXBytes{POS_SIGN, 6, 7, 8, 9, 0},
+			Inst: composeInst(2000, 0, 5, C_ST), // "STA 2000"
+			Reg:  RegState{A, composeWord(6, 7, 8, 9, 0)},
+			Want: composeWord(6, 7, 8, 9, 0),
 		},
 		{
-			Line:    "STA 2000(2:3)",
-			RegI:    A,
-			RegData: MIXBytes{POS_SIGN, 6, 7, 8, 9, 0},
-			Want:    MIXBytes{NEG_SIGN, 1, 9, 0, 4, 5},
+			Inst: composeInst(2000, 0, 19, C_ST), // "STA 2000(2:3)"
+			Reg:  RegState{A, composeWord(6, 7, 8, 9, 0)},
+			Want: -composeWord(1, 9, 0, 4, 5),
 		},
 		{
-			Line:    "ST1 2000",
-			RegI:    I1,
-			RegData: MIXBytes{POS_SIGN, 9, 9},
-			Want:    MIXBytes{POS_SIGN, 0, 0, 0, 9, 9},
+			Inst: composeInst(2000, 0, 3, C_ST+I1), // "ST1 2000(0:3)"
+			Reg:  RegState{I1, composeWord(0, 0, 0, 9, 9)},
+			Want: composeWord(0, 9, 9, 4, 5),
 		},
 		{
-			Line:    "ST1 2000(0:3)",
-			RegI:    I1,
-			RegData: MIXBytes{POS_SIGN, 9, 9},
-			Want:    MIXBytes{POS_SIGN, 0, 9, 9, 4, 5},
+			Inst: composeInst(2000, 0, 2, C_ST+J), // "STJ 2000"
+			Reg:  RegState{J, composeWord(0, 0, 0, 9, 9)},
+			Want: composeWord(9, 9, 3, 4, 5),
 		},
 		{
-			Line:    "STJ 2000",
-			RegI:    J,
-			RegData: MIXBytes{POS_SIGN, 9, 9},
-			Want:    MIXBytes{POS_SIGN, 9, 9, 3, 4, 5},
-		},
-		{
-			Line:    "STZ 2000",
-			RegI:    I1,
-			RegData: MIXBytes{POS_SIGN, 6, 7, 8, 9, 0},
-			Want:    MIXBytes{POS_SIGN, 0, 0, 0, 0, 0},
+			Inst: composeInst(2000, 0, 5, 33), // "STZ 2000"
+			Reg:  RegState{A, composeWord(6, 7, 8, 9, 0)},
+			Want: composeWord(0, 0, 0, 0, 0),
 		},
 	}
 	for _, test := range tests {
-		inst, err := ParseInst(test.Line)
-		if err != nil {
-			t.Fatalf("Error parsing %s: %v", test.Line, err)
-		}
-		copy(machine.R[test.RegI], test.RegData)
-		copy(machine.Cell(inst), MIXBytes{NEG_SIGN, 1, 2, 3, 4, 5}) // default cell
+		inst := test.Inst
+		machine.R[test.Reg.I].w = test.Reg.Data
+		machine.Write(inst.a(), -composeWord(1, 2, 3, 4, 5)) // default cell
 		machine.Exec(inst)
-		result := machine.Cell(inst)
-		if !test.Want.Equals(result) {
-			t.Errorf("Incorrect result for %s: want %v, got %v", test.Line, test.Want, result)
+		if result := machine.Read(inst.a()); test.Want != result {
+			t.Errorf("\n%s\n\nWant:%s\nGot:%s\n", inst.instView(), test.Want.view(), result.view())
 		}
 	}
 }
@@ -168,7 +161,7 @@ func TestArithmetic(t *testing.T) {
 		t.Error("N/A")
 	}
 }
-*/
+
 func TestAddressTransfer(t *testing.T) {
 	t.Error("N/A")
 }
@@ -204,3 +197,4 @@ func TestIO(t *testing.T) {
 func TestConversion(t *testing.T) {
 	t.Error("N/A")
 }
+*/
