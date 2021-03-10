@@ -9,20 +9,26 @@ import (
 	"strconv"
 )
 
+type LiteralConstRecord struct {
+	place, value Word
+}
+
 type Assembler struct {
-	locCounter  Word
-	definedSyms map[string]Word
-	mixalRe     *regexp.Regexp
+	locCtr, litCtr Word
+	knownSyms      map[string]Word
+	futureRefs     map[string][]Word
+	literalConsts  []LiteralConstRecord
+	mixalRe        *regexp.Regexp
 }
 
 func NewAssembler() *Assembler {
 	return &Assembler{
-		definedSyms: make(map[string]Word),
-		mixalRe:     regexp.MustCompile(`(.+\s)?(.+)\s(.+)`), // code or
+		knownSyms:  make(map[string]Word),
+		futureRefs: make(map[string][]Word),
+		mixalRe:    regexp.MustCompile(`(.+\s)?(.+)\s(.+)`), // code or
 	}
 }
 
-// should I return Word isntead of Word?
 func isDigit(c rune) bool  { return '0' <= c && c <= '9' }
 func isLetter(c rune) bool { return 'A' <= c && c <= 'Z' }
 func findChar(s string, target byte, from int) (pos int) {
@@ -46,7 +52,7 @@ func (a *Assembler) symbol(s string) (Word, error) {
 			return 0, errors.New("symbol: contains non-digit or non-capital letter")
 		}
 	}
-	v, known := a.definedSyms[s]
+	v, known := a.knownSyms[s]
 	if !known {
 		return v, ErrFutureRef
 	}
@@ -67,13 +73,16 @@ func (a *Assembler) number(s string) (Word, error) {
 }
 
 func (a *Assembler) literal(s string) (Word, error) {
-	if len(s) == 0 || 12 < len(s) {
+	if len(s) == 0 || 11 < len(s) {
 		return 0, errors.New("literal: len needs to be in [1, 11]")
 	}
-	if s[0] == '=' || s[len(s)-1] == '=' {
+	if s[0] != '=' || s[len(s)-1] != '=' {
 		return 0, errors.New("literal: not wrapped with equal")
 	}
-	return a.wValue(s[1 : len(s)-1])
+	v, err := a.wValue(s[1 : len(s)-1])
+	a.literalConsts = append(a.literalConsts, LiteralConstRecord{a.litCtr, v})
+	a.litCtr++
+	return v, err
 }
 
 func (a *Assembler) unaryOp(s string) (Word, error) {
@@ -127,7 +136,7 @@ func (a *Assembler) binaryOp(s string) (Word, error) {
 	return 0, errors.New("binaryOp: not an binary operation")
 }
 
-func (a *Assembler) Assemble(m *Arch, src io.Reader) ([]string, error) {
+func (a *Assembler) Assemble(m *Arch, src io.Reader) (startAddress Word, err error) {
 	line := bufio.NewScanner(src)
 	for line.Scan() {
 		if line.Text()[0] == '*' {
@@ -135,61 +144,62 @@ func (a *Assembler) Assemble(m *Arch, src io.Reader) ([]string, error) {
 		}
 		matches := a.mixalRe.FindStringSubmatch(line.Text())
 		if matches == nil {
-			return nil, errors.New("not a mixal line")
+			return -1, errors.New("not a mixal line")
 		}
 		sym, op, address := matches[1], matches[2], matches[3]
 		fmt.Println(sym, op, address)
+
+		if sym != "" {
+			if _, err := a.symbol(sym); err != nil {
+				return -1, err
+			}
+			a.knownSyms[sym] = a.locCtr
+			if locs, ok := a.futureRefs[sym]; ok { // check if sym was in futureRefs
+				delete(a.futureRefs, sym)
+				notMask := bitmask(1, 2) ^ 0x3FFFFFFF
+				for _, loc := range locs {
+					m.Mem[loc] = (m.Mem[loc] & notMask) | (a.locCtr << 18)
+				}
+			}
+		}
+
+		var v Word
+		if op == "EQU" || op == "ORIG" || op == "CON" || op == "END" {
+			v, err = a.wValue(address)
+			if err != nil {
+				return -1, err
+			}
+		}
+
 		switch op {
 		case "EQU":
-			v, err := a.wValue(address)
-			if err != nil {
-				return nil, err
-			}
-			a.definedSyms[sym] = v // refer to comment below
+			a.knownSyms[sym] = v // refer to comment below
 		case "ORIG":
-			if sym != "" { // can I just assign to "" safely?
-				_, err := a.symbol(sym)
-				if err != ErrFutureRef {
-					return nil, err
-				}
-				a.definedSyms[sym] = a.locCounter
-			}
-			v, err := a.wValue(address)
-			if err != nil {
-				return nil, err
-			}
-			a.locCounter = v
+			a.locCtr = v
 		case "CON":
-			v, err := a.wValue(address)
-			if err != nil {
-				return nil, err
-			}
-			m.Mem[a.locCounter] = v
-			a.locCounter++
+			m.Mem[a.locCtr] = v
+			a.locCtr++
 		case "ALF":
 			// assemble address[:5] as alphanumeric char MIX word
-			// m.Mem[a.locCounter] = v
-			a.locCounter++
+			// use Convert operators??
+			// m.Mem[a.locCtr] = v
+			a.locCtr++
 		case "END":
-			v, err := a.wValue(address)
-			if err != nil {
-				return nil, err
-			}
 			// process each recorded constant as CON
 			// also would have something similar for unknown syms
 			// if sym != "" ...
-			m.Mem[a.locCounter] = v
+			m.Mem[a.locCtr] = v
 		default:
 			// ParseInst logic here
 		}
 	}
-	return nil, line.Err()
+	return 0, line.Err()
 }
 
 // does it add to Wordernal instruction slice in assembler?
 func (a *Assembler) atom(s string) (Word, error) {
 	if "*" == s {
-		return a.locCounter, nil
+		return a.locCtr, nil
 	}
 	if v, err := a.number(s); err == nil {
 		return v, nil
@@ -218,10 +228,7 @@ func (a *Assembler) a(s string) (Word, error) {
 		return 0, nil
 	}
 	if _, err := a.symbol(s); err == ErrFutureRef { // future reference
-		/*
-			a.futureRefs[s] = append(a.futureRefs[s], v)
-			// would need to somehow hook into the generated inst and change the address
-		*/
+		a.futureRefs[s] = append(a.futureRefs[s], a.locCtr)
 		return 0, nil
 	}
 	if _, err := a.literal(s); err == nil { // literal constant

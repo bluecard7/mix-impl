@@ -147,9 +147,8 @@ func (m *Arch) Store(inst Word) {
 		regS = m.R[inst.c()-C_ST].w.slice(0, 5)
 	}
 	L, R := inst.fLR()
-	buf := Word(0).slice(L, R)
-	buf.copy(regS)
 	cell := m.Read(inst.a())
+	buf := Word(0).slice(L, R).copy(regS)
 	m.Write(inst.a(), buf.apply(cell))
 }
 
