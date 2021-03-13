@@ -9,23 +9,19 @@ import (
 	"strconv"
 )
 
-type LiteralConstRecord struct {
-	place, value Word
-}
-
 type Assembler struct {
-	locCtr, litCtr Word
-	knownSyms      map[string]Word
-	futureRefs     map[string][]Word
-	literalConsts  []LiteralConstRecord
-	mixalRe        *regexp.Regexp
+	locCtr        Word
+	knownSyms     map[string]Word
+	futureRefs    map[string][]Word
+	literalConsts []Word
+	mixalRe       *regexp.Regexp
 }
 
 func NewAssembler() *Assembler {
 	return &Assembler{
 		knownSyms:  make(map[string]Word),
 		futureRefs: make(map[string][]Word),
-		mixalRe:    regexp.MustCompile(`(.+\s)?(.+)\s(.+)`), // code or
+		mixalRe:    regexp.MustCompile(`(.+\s)?(.+)\s(.+)`),
 	}
 }
 
@@ -40,16 +36,20 @@ func findChar(s string, target byte, from int) (pos int) {
 	return -1
 }
 
-var ErrFutureRef = errors.New("symbol: future reference")
+var (
+	ErrSymLen    = errors.New("symbol: 0 or more than 10 characters")
+	ErrSymSyntax = errors.New("symbol: contains non-digit or non-capital letter")
+	ErrFutureRef = errors.New("symbol: future reference")
+)
 
 // what about local syms?
 func (a *Assembler) symbol(s string) (Word, error) {
 	if len(s) == 0 || 10 < len(s) {
-		return 0, errors.New("symbol: 0 or more than 10 characters")
+		return 0, ErrSymLen
 	}
 	for _, c := range s {
 		if !isDigit(c) && !isLetter(c) {
-			return 0, errors.New("symbol: contains non-digit or non-capital letter")
+			return 0, ErrSymSyntax
 		}
 	}
 	v, known := a.knownSyms[s]
@@ -59,31 +59,42 @@ func (a *Assembler) symbol(s string) (Word, error) {
 	return v, nil
 }
 
+var (
+	ErrNumLen    = errors.New("number: 0 or more than 10 potential digits")
+	ErrNumSyntax = errors.New("number: contains non-digit")
+)
+
 func (a *Assembler) number(s string) (Word, error) {
 	if len(s) == 0 || 10 < len(s) { // c is unicode, but digits are ascii (1 byte)
-		return 0, errors.New("number: 0 or more than 10 potential digits")
+		return 0, ErrNumLen
 	}
 	for _, c := range s {
 		if !isDigit(c) {
-			return 0, errors.New("number: contains non-digit")
+			return 0, ErrNumSyntax
 		}
 	}
 	v, err := strconv.Atoi(s)
 	return Word(v), err
 }
 
+var (
+	ErrLiteralLen    = errors.New("literal: len needs to be in [1, 11]")
+	ErrLiteralSyntax = errors.New("literal: not wrapped with equal")
+)
+
 func (a *Assembler) literal(s string) (Word, error) {
 	if len(s) == 0 || 11 < len(s) {
-		return 0, errors.New("literal: len needs to be in [1, 11]")
+		return 0, ErrLiteralLen
 	}
 	if s[0] != '=' || s[len(s)-1] != '=' {
-		return 0, errors.New("literal: not wrapped with equal")
+		return 0, ErrLiteralSyntax
 	}
 	v, err := a.wValue(s[1 : len(s)-1])
-	a.literalConsts = append(a.literalConsts, LiteralConstRecord{a.litCtr, v})
-	a.litCtr++
+	a.literalConsts = append(a.literalConsts, v)
 	return v, err
 }
+
+var ErrNonUnaryOp = errors.New("unaryOp: not a unary op")
 
 func (a *Assembler) unaryOp(s string) (Word, error) {
 	unaryOp := s[0]
@@ -97,8 +108,10 @@ func (a *Assembler) unaryOp(s string) (Word, error) {
 		}
 		return v, nil
 	}
-	return 0, errors.New("unaryOp: not a unary op")
+	return 0, ErrNonUnaryOp
 }
+
+var ErrNonBinaryOp = errors.New("binaryOp: not a binary op")
 
 func (a *Assembler) binaryOp(s string) (Word, error) {
 	op, i := "", len(s)-1
@@ -133,7 +146,7 @@ func (a *Assembler) binaryOp(s string) (Word, error) {
 	case ":":
 		return 8*exprVal + atomVal, nil
 	}
-	return 0, errors.New("binaryOp: not an binary operation")
+	return 0, ErrNonBinaryOp
 }
 
 func (a *Assembler) Assemble(m *Arch, src io.Reader) (startAddress Word, err error) {
@@ -196,7 +209,9 @@ func (a *Assembler) Assemble(m *Arch, src io.Reader) (startAddress Word, err err
 	return 0, line.Err()
 }
 
-// does it add to Wordernal instruction slice in assembler?
+// does it add to instruction slice in assembler?
+var ErrNonAtom = errors.New("atom: not an atom")
+
 func (a *Assembler) atom(s string) (Word, error) {
 	if "*" == s {
 		return a.locCtr, nil
@@ -207,7 +222,7 @@ func (a *Assembler) atom(s string) (Word, error) {
 	if v, err := a.symbol(s); err == nil {
 		return v, nil
 	}
-	return 0, errors.New("atom: not an atom") // more descriptive err? check errors package
+	return 0, ErrNonAtom
 }
 
 func (a *Assembler) expression(s string) (Word, error) {
@@ -231,10 +246,9 @@ func (a *Assembler) a(s string) (Word, error) {
 		a.futureRefs[s] = append(a.futureRefs[s], a.locCtr)
 		return 0, nil
 	}
-	if _, err := a.literal(s); err == nil { // literal constant
-		// would place in a constant record
+	if v, err := a.literal(s); err == nil { // literal constant
 		// create internal sym, kind of a future ref too
-		return 0, nil
+		return v, nil
 	}
 	if v, err := a.expression(s); err == nil { // expression
 		return v, nil

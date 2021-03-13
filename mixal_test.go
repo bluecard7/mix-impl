@@ -6,20 +6,26 @@ import (
 
 var a = NewAssembler()
 
+func wordDiff(want, got Word) string {
+	return "\nWant:" + want.view() + "\nGot:" + got.view()
+}
+
 func TestAtom(t *testing.T) {
 	tests := []struct {
 		Line string
 		Want Word
 		Err  error
 	}{
-		{Line: "*", Want: 0},
-		{Line: "12345", Want: 12345},
-		{Line: "somesym", Want: 0}, // need to define symbols
+		{"*", 0, nil},
+		{"12345", 12345, nil},
+		{"SOMESYM", 0, ErrNonAtom}, // need to define symbols
 	}
 	for _, test := range tests {
-		v, _ := a.atom(test.Line)
-		if v != test.Want {
-			t.Errorf("\nWant:%s\nGot:%s\n", test.Want.view(), v.view())
+		v, err := a.atom(test.Line)
+		if v != test.Want || err != test.Err {
+			t.Error(test.Line)
+			t.Error(wordDiff(test.Want, v))
+			t.Error(test.Err, "|", err)
 		}
 	}
 }
@@ -30,14 +36,66 @@ func TestExpression(t *testing.T) {
 		Want Word
 		Err  error
 	}{
-		{Line: "-12345", Want: -12345},
-		{Line: "123+45", Want: 168},
-		{Line: "1:5", Want: 13},
+		{"-12345", -12345, nil},
+		{"123+45", 168, nil},
+		{"1:5", 13, nil},
 	}
 	for _, test := range tests {
-		v, _ := a.expression(test.Line)
-		if v != test.Want {
-			t.Errorf("\nWant:%s\nGot:%s\n", test.Want.view(), v.view())
+		v, err := a.expression(test.Line)
+		if v != test.Want || err != test.Err {
+			t.Error(wordDiff(test.Want, v))
+		}
+	}
+}
+
+func TestLiteral(t *testing.T) {
+	tests := []struct {
+		Line string
+		Want Word
+		Err  error
+	}{
+		{"=1+34(5+4)=", composeWord(35, 0, 0, 0, 0), nil},
+	}
+	for _, test := range tests {
+		v, err := a.literal(test.Line)
+		if v != test.Want || err != test.Err {
+			t.Error(wordDiff(test.Want, v))
+		}
+	}
+}
+
+func TestA(t *testing.T) {
+	tests := []struct {
+		Line string
+		Want Word
+		Err  error
+	}{
+		{"", 0, nil}, // just vacuous case since it's a proxy to literal and expression
+		// futureRef test?
+	}
+	for _, test := range tests {
+		v, err := a.a(test.Line)
+		if v != test.Want || err != test.Err {
+			t.Error(test.Line)
+			t.Error(wordDiff(test.Want, v))
+			t.Error(test.Err, "|", err)
+		}
+	}
+}
+
+func TestI(t *testing.T) {
+	tests := []struct {
+		Line string
+		Want Word
+		Err  error
+	}{
+		{"", 0, nil},
+		{",1:5", 13, nil},
+	}
+	for _, test := range tests {
+		v, err := a.i(test.Line)
+		if v != test.Want || err != test.Err {
+			t.Error(wordDiff(test.Want, v))
 		}
 	}
 }
@@ -48,12 +106,12 @@ func TestF(t *testing.T) {
 		Want Word
 		Err  error
 	}{
-		{Line: "", Want: 5},
-		{Line: "(1:5)", Want: 13},
+		{"", 5, nil},
+		{"(1:5)", 13, nil},
 	}
 	for _, test := range tests {
-		v, _ := a.f(test.Line)
-		if v != test.Want {
+		v, err := a.f(test.Line)
+		if v != test.Want || err != test.Err {
 			t.Errorf("\nWant:%s\nGot:%s\n", test.Want.view(), v.view())
 		}
 	}
@@ -64,15 +122,17 @@ func TestWValue(t *testing.T) {
 	tests := []struct {
 		Line string
 		Want Word
+		Err  error
 	}{
-		{"-1000(0:2)", -composeWord(1000>>6&63, 1000&63, 0, 0, 0)},
-		{"-1000", -composeWord(0, 0, 0, 1000>>6&63, 1000&63)},
-		{"-1000(0:2),1", composeWord(0, 0, 0, 0, 1)},
-		{"1,-1000(0:2)", -composeWord(1000>>6&63, 1000&63, 0, 0, 1)},
+		{"-1000(0:2)", -composeWord(1000>>6&63, 1000&63, 0, 0, 0), nil},
+		{"-1000", -composeWord(0, 0, 0, 1000>>6&63, 1000&63), nil},
+		{"-1000(0:2),1", composeWord(0, 0, 0, 0, 1), nil},
+		{"1,-1000(0:2)", -composeWord(1000>>6&63, 1000&63, 0, 0, 1), nil},
 	}
 
 	for _, test := range tests {
-		if v, err := a.wValue(test.Line); v != test.Want {
+		v, err := a.wValue(test.Line)
+		if v != test.Want || err != test.Err {
 			t.Errorf("\nWant:%s\nGot:%s\n", test.Want.view(), v.view())
 			t.Error(err)
 		}
